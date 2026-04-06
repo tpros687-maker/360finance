@@ -1,0 +1,154 @@
+import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, Download, Plus, TrendingDown, TrendingUp } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { RegistrosTable } from "@/components/registros/RegistrosTable";
+import { RegistrosFilters } from "@/components/registros/RegistrosFilters";
+import { RegistroModal } from "@/components/registros/RegistroModal";
+import { getRegistros, exportarRegistros } from "@/lib/registrosApi";
+import { useRegistrosStore } from "@/store/registrosStore";
+import { toast } from "@/hooks/useToast";
+import type { Registro, TipoMovimiento } from "@/types/registros";
+
+export default function RegistrosPage() {
+  const { filters } = useRegistrosStore();
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRegistro, setEditingRegistro] = useState<Registro | null>(null);
+  const [defaultTipo, setDefaultTipo] = useState<TipoMovimiento>("gasto");
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["registros", filters],
+    queryFn: () => getRegistros(filters),
+    placeholderData: (prev) => prev,
+  });
+
+  const emptyData = { items: [], total: 0, page: 1, limit: 20, pages: 1 };
+
+  function openNew(tipo: TipoMovimiento) {
+    setEditingRegistro(null);
+    setDefaultTipo(tipo);
+    setModalOpen(true);
+  }
+
+  function openEdit(registro: Registro) {
+    setEditingRegistro(registro);
+    setModalOpen(true);
+  }
+
+  async function handleExport(formato: "excel" | "pdf") {
+    setExportMenuOpen(false);
+    setExporting(true);
+    try {
+      await exportarRegistros({
+        formato,
+        tipo: filters.tipo,
+        categoria_id: filters.categoria_id,
+        potrero_id: filters.potrero_id,
+        fecha_desde: filters.fecha_desde,
+        fecha_hasta: filters.fecha_hasta,
+        q: filters.q,
+      });
+    } catch {
+      toast({ title: "Error al exportar", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full p-6 gap-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Registros</h1>
+          <p className="text-slate-400 text-sm mt-0.5">Historial de movimientos financieros</p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Export dropdown */}
+          <div className="relative" ref={exportRef}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={exporting}
+              onClick={() => setExportMenuOpen((v) => !v)}
+            >
+              <Download className="h-4 w-4" />
+              Exportar
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+            {exportMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setExportMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 z-20 w-36 rounded-lg border border-slate-700 bg-slate-800 shadow-xl overflow-hidden">
+                  <button
+                    className="w-full px-4 py-2.5 text-sm text-left text-slate-200 hover:bg-slate-700 transition-colors"
+                    onClick={() => handleExport("excel")}
+                  >
+                    Excel (.xlsx)
+                  </button>
+                  <button
+                    className="w-full px-4 py-2.5 text-sm text-left text-slate-200 hover:bg-slate-700 transition-colors"
+                    onClick={() => handleExport("pdf")}
+                  >
+                    PDF
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          <Button
+            onClick={() => openNew("gasto")}
+            variant="destructive"
+            className="gap-2"
+          >
+            <TrendingDown className="h-4 w-4" />
+            <Plus className="h-4 w-4 -ml-1" />
+            Gasto
+          </Button>
+          <Button
+            onClick={() => openNew("ingreso")}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800"
+          >
+            <TrendingUp className="h-4 w-4" />
+            <Plus className="h-4 w-4 -ml-1" />
+            Ingreso
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <RegistrosFilters />
+
+      {/* Table */}
+      <div className="flex-1 min-h-0">
+        <RegistrosTable
+          data={data ?? emptyData}
+          isLoading={isLoading}
+          onEdit={openEdit}
+        />
+      </div>
+
+      {/* Modal */}
+      <RegistroModal
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingRegistro(null);
+        }}
+        registro={editingRegistro}
+        defaultTipo={defaultTipo}
+      />
+    </div>
+  );
+}
