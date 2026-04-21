@@ -16,6 +16,22 @@ export async function getMe(): Promise<User> {
   return res.data;
 }
 
+export async function ssoLogin(token: string): Promise<TokenPair> {
+  const res = await api.post<TokenPair>("/auth/sso", { token });
+  return res.data;
+}
+
+export async function completeOnboarding(data: {
+  es_productor: boolean;
+  es_negocio: boolean;
+  nombre_campo?: string | null;
+  departamento?: string | null;
+  moneda: string;
+}): Promise<User> {
+  const res = await api.patch<User>("/auth/onboarding", data);
+  return res.data;
+}
+
 export function parseApiError(error: unknown): string {
   if (
     typeof error === "object" &&

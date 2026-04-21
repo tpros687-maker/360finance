@@ -23,6 +23,7 @@ export interface Registro {
   potrero: PotreroSimple | null;
   tipo: TipoMovimiento;
   monto: string; // Decimal serialized as string
+  moneda: string;
   fecha: string; // "YYYY-MM-DD"
   descripcion: string | null;
   comprobante_url: string | null;
@@ -41,6 +42,7 @@ export interface RegistroCreate {
   categoria_id: number;
   tipo: TipoMovimiento;
   monto: number;
+  moneda?: string;
   fecha: string;
   descripcion?: string;
   comprobante_url?: string;
@@ -51,6 +53,7 @@ export interface RegistroUpdate {
   categoria_id?: number;
   tipo?: TipoMovimiento;
   monto?: number;
+  moneda?: string;
   fecha?: string;
   descripcion?: string;
   comprobante_url?: string;

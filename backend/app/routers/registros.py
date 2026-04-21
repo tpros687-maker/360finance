@@ -340,6 +340,7 @@ async def create_registro(
         potrero_id=payload.potrero_id,
         tipo=payload.tipo,
         monto=payload.monto,
+        moneda=payload.moneda,
         fecha=payload.fecha,
         descripcion=payload.descripcion,
         comprobante_url=payload.comprobante_url,
@@ -367,6 +368,8 @@ async def update_registro(
         registro.tipo = payload.tipo
     if payload.monto is not None:
         registro.monto = payload.monto
+    if payload.moneda is not None:
+        registro.moneda = payload.moneda
     if payload.fecha is not None:
         registro.fecha = payload.fecha
     if payload.descripcion is not None:

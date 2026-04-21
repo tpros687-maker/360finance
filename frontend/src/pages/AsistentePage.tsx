@@ -14,14 +14,14 @@ const SUGERENCIAS = [
 function TypingIndicator() {
   return (
     <div className="flex items-end gap-2 mb-4">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 border border-slate-600">
-        <Bot className="h-4 w-4 text-brand-400" />
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agro-bg border border-agro-accent/20">
+        <Bot className="h-4 w-4 text-agro-primary" />
       </div>
-      <div className="rounded-2xl rounded-bl-sm bg-slate-800 border border-slate-700 px-4 py-3">
+      <div className="rounded-2xl rounded-bl-sm bg-white border border-agro-accent/20 px-4 py-3">
         <div className="flex gap-1 items-center h-5">
-          <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
-          <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
-          <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+          <span className="h-2 w-2 rounded-full bg-agro-muted animate-bounce [animation-delay:0ms]" />
+          <span className="h-2 w-2 rounded-full bg-agro-muted animate-bounce [animation-delay:150ms]" />
+          <span className="h-2 w-2 rounded-full bg-agro-muted animate-bounce [animation-delay:300ms]" />
         </div>
       </div>
     </div>
@@ -87,21 +87,21 @@ export default function AsistentePage() {
     historial.length <= 1 && !isLoading;
 
   return (
-    <div className="flex h-full flex-col bg-slate-950">
+    <div className="flex h-full flex-col bg-agro-bg">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-700/60 bg-slate-900 px-6 py-4">
+      <div className="flex items-center justify-between border-b border-agro-accent/20 bg-white px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/20 border border-brand-500/30">
-            <Bot className="h-5 w-5 text-brand-400" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-agro-primary/10 border border-agro-primary/30">
+            <Bot className="h-5 w-5 text-agro-primary" />
           </div>
           <div>
-            <h1 className="text-base font-semibold text-white">Asistente IA</h1>
-            <p className="text-xs text-slate-400">Powered by Gemini 2.0 Flash</p>
+            <h1 className="text-base font-semibold text-agro-text">Asistente IA</h1>
+            <p className="text-xs text-agro-muted">Powered by Gemini 2.0 Flash</p>
           </div>
         </div>
         <button
           onClick={handleNuevaConversacion}
-          className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+          className="flex items-center gap-2 rounded-lg border border-agro-accent/20 bg-agro-bg px-3 py-1.5 text-xs font-medium text-agro-muted transition-colors hover:border-agro-accent/40 hover:text-agro-text"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           Nueva conversación
@@ -121,8 +121,8 @@ export default function AsistentePage() {
             >
               {/* Avatar */}
               {msg.role === "assistant" && (
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 border border-slate-600">
-                  <Bot className="h-4 w-4 text-brand-400" />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-agro-bg border border-agro-accent/20">
+                  <Bot className="h-4 w-4 text-agro-primary" />
                 </div>
               )}
 
@@ -131,8 +131,8 @@ export default function AsistentePage() {
                 className={cn(
                   "max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
                   msg.role === "user"
-                    ? "rounded-br-sm bg-brand-600 text-white shadow-md"
-                    : "rounded-bl-sm bg-slate-800 border border-slate-700 text-slate-100"
+                    ? "rounded-br-sm bg-agro-primary text-white shadow-md"
+                    : "rounded-bl-sm bg-white border border-agro-accent/20 text-agro-text"
                 )}
               >
                 {msg.content}
@@ -147,8 +147,8 @@ export default function AsistentePage() {
           {mostrarSugerencias && (
             <div className="mt-6">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-4 w-4 text-brand-400" />
-                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                <Sparkles className="h-4 w-4 text-agro-primary" />
+                <span className="text-xs font-medium text-agro-muted uppercase tracking-wider">
                   Preguntas frecuentes
                 </span>
               </div>
@@ -157,7 +157,7 @@ export default function AsistentePage() {
                   <button
                     key={s}
                     onClick={() => handleSugerencia(s)}
-                    className="rounded-full border border-slate-700 bg-slate-800/60 px-4 py-2 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/50 hover:bg-brand-500/10 hover:text-brand-300"
+                    className="rounded-full border border-agro-accent/20 bg-agro-bg px-4 py-2 text-xs font-medium text-agro-muted transition-colors hover:border-agro-primary/50 hover:bg-agro-primary/10 hover:text-agro-primary"
                   >
                     {s}
                   </button>
@@ -171,9 +171,9 @@ export default function AsistentePage() {
       </div>
 
       {/* Input area */}
-      <div className="border-t border-slate-700/60 bg-slate-900 p-4">
+      <div className="border-t border-agro-accent/20 bg-white p-4">
         <div className="mx-auto max-w-3xl">
-          <div className="flex items-end gap-3 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 focus-within:border-brand-500/50 transition-colors">
+          <div className="flex items-end gap-3 rounded-xl border border-agro-accent/20 bg-agro-bg px-4 py-3 focus-within:border-agro-primary/50 transition-colors">
             <textarea
               ref={inputRef}
               value={input}
@@ -182,18 +182,18 @@ export default function AsistentePage() {
               placeholder="Escribí tu pregunta... (Enter para enviar)"
               rows={1}
               disabled={isLoading}
-              className="flex-1 resize-none bg-transparent text-sm text-slate-100 placeholder-slate-500 outline-none disabled:opacity-50"
+              className="flex-1 resize-none bg-transparent text-sm text-agro-text placeholder-agro-muted/50 outline-none disabled:opacity-50"
               style={{ maxHeight: "120px", overflowY: "auto" }}
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white transition-colors hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-agro-primary text-white transition-colors hover:bg-agro-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Send className="h-4 w-4" />
             </button>
           </div>
-          <p className="mt-2 text-center text-xs text-slate-600">
+          <p className="mt-2 text-center text-xs text-agro-muted">
             El asistente tiene acceso a tus datos en tiempo real.
           </p>
         </div>

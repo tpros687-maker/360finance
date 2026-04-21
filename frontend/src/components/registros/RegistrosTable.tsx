@@ -56,11 +56,10 @@ export function RegistrosTable({ data, isLoading, onEdit }: Props) {
   };
 
   const handleComprobanteClick = (url: string) => {
-    const full = url.startsWith("http") ? url : `http://localhost:8000${url}`;
     if (/\.(jpg|jpeg|png)$/i.test(url)) {
-      setLightboxUrl(full);
+      setLightboxUrl(url);
     } else {
-      window.open(full, "_blank");
+      window.open(url, "_blank");
     }
   };
 

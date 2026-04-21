@@ -14,6 +14,10 @@ from app.routers.puntos_interes import router as puntos_interes_router
 from app.routers.movimientos import router as movimientos_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.asistente import router as asistente_router
+from app.routers.clientes import router as clientes_router
+from app.routers.proveedores import router as proveedores_router
+from app.routers.productos import router as productos_router
+from app.routers.pagos import router as pagos_router
 
 app = FastAPI(
     title="360 Finance API",
@@ -24,7 +28,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,6 +43,10 @@ app.include_router(puntos_interes_router)
 app.include_router(movimientos_router)
 app.include_router(dashboard_router)
 app.include_router(asistente_router)
+app.include_router(clientes_router)
+app.include_router(proveedores_router)
+app.include_router(productos_router)
+app.include_router(pagos_router)
 
 # Serve uploaded files
 _uploads_dir = "/app/uploads"

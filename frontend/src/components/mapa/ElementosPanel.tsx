@@ -58,7 +58,7 @@ export function ElementosPanel({ onFlyTo }: Props) {
     <div
       className={cn(
         "absolute top-[96px] left-0 bottom-0 z-10 flex flex-col",
-        "bg-slate-900/95 backdrop-blur-sm border-r border-slate-700 shadow-xl",
+        "bg-white/95 backdrop-blur-sm border-r border-agro-accent/20 shadow-xl",
         "transition-all duration-200",
         collapsed ? "w-10" : "w-56"
       )}
@@ -66,7 +66,7 @@ export function ElementosPanel({ onFlyTo }: Props) {
       {/* Toggle button */}
       <button
         onClick={() => setCollapsed((c) => !c)}
-        className="flex items-center justify-center h-8 w-full border-b border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
+        className="flex items-center justify-center h-8 w-full border-b border-agro-accent/20 text-agro-muted hover:text-agro-text hover:bg-agro-bg transition-colors flex-shrink-0"
         title={collapsed ? "Expandir panel" : "Colapsar panel"}
       >
         {collapsed ? (
@@ -90,9 +90,9 @@ export function ElementosPanel({ onFlyTo }: Props) {
               )}
             </div>
             <div title={`${puntos.length} puntos`} className="relative">
-              <MapPin className="w-5 h-5 text-brand-400" />
+              <MapPin className="w-5 h-5 text-agro-primary" />
               {puntos.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-brand-600 text-white text-[9px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">
+                <span className="absolute -top-1 -right-1 bg-agro-primary text-white text-[9px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">
                   {puntos.length}
                 </span>
               )}
@@ -105,14 +105,14 @@ export function ElementosPanel({ onFlyTo }: Props) {
             <div className="px-3 pb-1 pt-1">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <Fence className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <span className="text-[11px] font-semibold text-agro-muted uppercase tracking-wider">
                   Potreros
                 </span>
-                <span className="ml-auto text-[10px] text-slate-500">{potreros.length}</span>
+                <span className="ml-auto text-[10px] text-agro-muted">{potreros.length}</span>
               </div>
 
               {potreros.length === 0 ? (
-                <p className="text-slate-600 text-xs italic px-1">Sin potreros</p>
+                <p className="text-agro-muted text-xs italic px-1">Sin potreros</p>
               ) : (
                 <div className="space-y-0.5">
                   {potreros.map((p) => {
@@ -129,17 +129,17 @@ export function ElementosPanel({ onFlyTo }: Props) {
                       <button
                         key={p.id}
                         onClick={() => handlePotreroClick(p.id, p.geometria.coordinates)}
-                        className="w-full text-left px-2 py-1.5 rounded-md hover:bg-slate-800 transition-colors group"
+                        className="w-full text-left px-2 py-1.5 rounded-md hover:bg-agro-bg transition-colors group"
                       >
                         <div className="flex items-start gap-1.5">
                           <span
                             className={cn(
                               "w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0",
-                              p.en_descanso ? "bg-slate-400" : "bg-emerald-400"
+                              p.en_descanso ? "bg-agro-muted" : "bg-emerald-400"
                             )}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-slate-200 text-xs font-medium truncate group-hover:text-white">
+                            <p className="text-agro-text text-xs font-medium truncate group-hover:text-agro-text">
                               {p.nombre}
                             </p>
                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
@@ -152,17 +152,17 @@ export function ElementosPanel({ onFlyTo }: Props) {
                                 {TIPO_POTRERO_LABEL[p.tipo]}
                               </span>
                               {dias !== null && (
-                                <span className="text-[10px] bg-slate-700/60 text-slate-300 px-1.5 rounded-full leading-4">
+                                <span className="text-[10px] bg-agro-bg text-agro-muted px-1.5 rounded-full leading-4">
                                   💤 {dias}d
                                 </span>
                               )}
                               {totalAnimales !== null && dias === null && (
-                                <span className="text-[10px] text-slate-500">
+                                <span className="text-[10px] text-agro-muted">
                                   {totalAnimales} anim.
                                 </span>
                               )}
                               {p.hectareas !== null && p.hectareas !== undefined && (
-                                <span className="text-[10px] text-slate-500">
+                                <span className="text-[10px] text-agro-muted">
                                   {Number(p.hectareas).toLocaleString("es-AR", { maximumFractionDigits: 1 })} ha
                                 </span>
                               )}
@@ -177,20 +177,20 @@ export function ElementosPanel({ onFlyTo }: Props) {
             </div>
 
             {/* Divider */}
-            <div className="my-2 border-t border-slate-800" />
+            <div className="my-2 border-t border-agro-accent/20" />
 
             {/* Puntos section */}
             <div className="px-3">
               <div className="flex items-center gap-1.5 mb-1.5">
-                <MapPin className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <MapPin className="w-3.5 h-3.5 text-agro-primary flex-shrink-0" />
+                <span className="text-[11px] font-semibold text-agro-muted uppercase tracking-wider">
                   Puntos de interés
                 </span>
-                <span className="ml-auto text-[10px] text-slate-500">{puntos.length}</span>
+                <span className="ml-auto text-[10px] text-agro-muted">{puntos.length}</span>
               </div>
 
               {puntos.length === 0 ? (
-                <p className="text-slate-600 text-xs italic px-1">Sin puntos</p>
+                <p className="text-agro-muted text-xs italic px-1">Sin puntos</p>
               ) : (
                 <div className="space-y-0.5">
                   {puntos.map((pt) => (
@@ -199,13 +199,13 @@ export function ElementosPanel({ onFlyTo }: Props) {
                       onClick={() =>
                         handlePuntoClick(pt.geometria.coordinates as [number, number])
                       }
-                      className="w-full text-left px-2 py-1.5 rounded-md hover:bg-slate-800 transition-colors group"
+                      className="w-full text-left px-2 py-1.5 rounded-md hover:bg-agro-bg transition-colors group"
                     >
                       <div className="flex items-center gap-1.5">
                         <span className="text-base leading-none flex-shrink-0">
                           {PUNTO_EMOJI[pt.tipo]}
                         </span>
-                        <span className="text-slate-200 text-xs truncate group-hover:text-white">
+                        <span className="text-agro-text text-xs truncate group-hover:text-agro-text">
                           {pt.nombre}
                         </span>
                       </div>

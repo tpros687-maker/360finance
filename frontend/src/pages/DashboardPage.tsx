@@ -21,20 +21,26 @@ import {
   Maximize2,
   CalendarClock,
   ArrowRight,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  PackageCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDashboardResumen } from "@/lib/dashboardApi";
+import { getClientes } from "@/lib/clientesApi";
+import { getProveedores } from "@/lib/proveedoresApi";
 import { useAuthStore } from "@/store/authStore";
 import type { DashboardResumen, MovimientoProximo } from "@/types/dashboard";
 import type { ResumenCategoria } from "@/types/registros";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatARS(value: string | number): string {
+function formatMoneda(value: string | number, moneda: string): string {
   const num = typeof value === "string" ? parseFloat(value) : value;
-  return new Intl.NumberFormat("es-AR", {
+  return new Intl.NumberFormat("es-UY", {
     style: "currency",
-    currency: "ARS",
+    currency: moneda === "USD" ? "USD" : "UYU",
     maximumFractionDigits: 0,
   }).format(num);
 }
@@ -79,7 +85,7 @@ const ESPECIE_LABEL: Record<string, string> = {
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-slate-800 ${className}`} />;
+  return <div className={`animate-pulse rounded-lg bg-agro-accent/20 ${className}`} />;
 }
 
 function DashboardSkeleton() {
@@ -106,14 +112,15 @@ function DashboardSkeleton() {
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ perfil }: { perfil?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
-      <Wallet className="h-12 w-12 text-slate-600" />
-      <h2 className="text-lg font-semibold text-slate-300">Sin datos aún</h2>
-      <p className="text-slate-500 max-w-xs text-sm">
-        Registrá tus primeros gastos e ingresos, y agregá potreros en el mapa para ver tu
-        resumen aquí.
+      <Wallet className="h-12 w-12 text-agro-accent" />
+      <h2 className="text-lg font-semibold text-agro-text">Sin datos aún</h2>
+      <p className="text-agro-muted max-w-xs text-sm">
+        {perfil === "negocio"
+          ? "Registrá tus primeros gastos e ingresos para ver tu resumen aquí."
+          : "Registrá tus primeros gastos e ingresos, y agregá potreros en el mapa para ver tu resumen aquí."}
       </p>
     </div>
   );
@@ -129,11 +136,11 @@ interface KpiCardProps {
   change?: { text: string; positive: boolean } | null;
 }
 
-function KpiCard({ title, value, icon, valueColor = "text-white", change }: KpiCardProps) {
+function KpiCard({ title, value, icon, valueColor = "text-agro-text", change }: KpiCardProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-slate-400">{title}</CardTitle>
+        <CardTitle className="text-sm font-medium text-agro-muted">{title}</CardTitle>
         {icon}
       </CardHeader>
       <CardContent className="space-y-1">
@@ -151,13 +158,14 @@ function KpiCard({ title, value, icon, valueColor = "text-white", change }: KpiC
 // ── Custom Tooltip para BarChart ──────────────────────────────────────────────
 
 function BarTooltip({ active, payload, label }: any) {
+  const moneda = useAuthStore((s) => s.user?.moneda ?? "UYU");
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm shadow-xl">
-      <p className="font-medium text-slate-200 mb-1">{label}</p>
+    <div className="bg-white border border-agro-accent/20 rounded-lg p-3 text-sm shadow-xl">
+      <p className="font-medium text-agro-text mb-1">{label}</p>
       {payload.map((entry: any) => (
         <p key={entry.name} style={{ color: entry.color }}>
-          {entry.name}: {formatARS(entry.value)}
+          {entry.name}: {formatMoneda(entry.value, moneda)}
         </p>
       ))}
     </div>
@@ -167,12 +175,13 @@ function BarTooltip({ active, payload, label }: any) {
 // ── Custom Tooltip para PieChart ──────────────────────────────────────────────
 
 function PieTooltip({ active, payload }: any) {
+  const moneda = useAuthStore((s) => s.user?.moneda ?? "UYU");
   if (!active || !payload?.length) return null;
   const { name, value } = payload[0];
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm shadow-xl">
-      <p className="text-slate-200 font-medium">{name}</p>
-      <p className="text-white">{formatARS(value)}</p>
+    <div className="bg-white border border-agro-accent/20 rounded-lg p-3 text-sm shadow-xl">
+      <p className="text-agro-text font-medium">{name}</p>
+      <p className="text-agro-primary font-semibold">{formatMoneda(value, moneda)}</p>
     </div>
   );
 }
@@ -189,23 +198,23 @@ function BarChartCard({ data }: { data: DashboardResumen["por_mes"] }) {
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
-        <CardTitle className="text-base text-slate-300">Ingresos vs Gastos — últimos 12 meses</CardTitle>
+        <CardTitle className="text-base text-agro-text">Ingresos vs Gastos — últimos 12 meses</CardTitle>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-8">Sin registros en los últimos 12 meses.</p>
+          <p className="text-agro-muted text-sm text-center py-8">Sin registros en los últimos 12 meses.</p>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#8CB79B40" vertical={false} />
               <XAxis
                 dataKey="mes"
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                tick={{ fill: "#6B8F7A", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                tick={{ fill: "#6B8F7A", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 tickFormatter={(v) =>
@@ -217,8 +226,8 @@ function BarChartCard({ data }: { data: DashboardResumen["por_mes"] }) {
                 }
                 width={52}
               />
-              <Tooltip content={<BarTooltip />} cursor={{ fill: "#1e293b" }} />
-              <Bar dataKey="Ingresos" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={24} />
+              <Tooltip content={<BarTooltip />} cursor={{ fill: "#8CB79B15" }} />
+              <Bar dataKey="Ingresos" fill="#235347" radius={[3, 3, 0, 0]} maxBarSize={24} />
               <Bar dataKey="Gastos" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={24} />
             </BarChart>
           </ResponsiveContainer>
@@ -242,11 +251,11 @@ function PieChartCard({ categorias }: { categorias: ResumenCategoria[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base text-slate-300">Gastos por categoría</CardTitle>
+        <CardTitle className="text-base text-agro-text">Gastos por categoría</CardTitle>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-8">Sin gastos registrados.</p>
+          <p className="text-agro-muted text-sm text-center py-8">Sin gastos registrados.</p>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
@@ -267,7 +276,7 @@ function PieChartCard({ categorias }: { categorias: ResumenCategoria[] }) {
               <Legend
                 iconType="circle"
                 iconSize={8}
-                wrapperStyle={{ fontSize: "11px", color: "#94a3b8" }}
+                wrapperStyle={{ fontSize: "11px", color: "#6B8F7A" }}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -285,41 +294,41 @@ function CampoCard({ data }: { data: DashboardResumen }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base text-slate-300">Información del campo</CardTitle>
+        <CardTitle className="text-base text-agro-text">Información del campo</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
-          <div className="flex flex-col items-center bg-slate-800/60 rounded-lg p-3">
-            <MapPin className="h-5 w-5 text-brand-400 mb-1" />
-            <span className="text-xl font-bold text-white">{data.total_potreros}</span>
-            <span className="text-xs text-slate-400">Potreros</span>
+          <div className="flex flex-col items-center bg-agro-bg rounded-lg p-3">
+            <MapPin className="h-5 w-5 text-agro-primary mb-1" />
+            <span className="text-xl font-bold text-agro-text">{data.total_potreros}</span>
+            <span className="text-xs text-agro-muted">Potreros</span>
           </div>
-          <div className="flex flex-col items-center bg-slate-800/60 rounded-lg p-3">
-            <Maximize2 className="h-5 w-5 text-amber-400 mb-1" />
-            <span className="text-xl font-bold text-white">
+          <div className="flex flex-col items-center bg-agro-bg rounded-lg p-3">
+            <Maximize2 className="h-5 w-5 text-amber-500 mb-1" />
+            <span className="text-xl font-bold text-agro-text">
               {parseFloat(data.hectareas_totales).toLocaleString("es-AR", { maximumFractionDigits: 1 })}
             </span>
-            <span className="text-xs text-slate-400">Hectáreas</span>
+            <span className="text-xs text-agro-muted">Hectáreas</span>
           </div>
-          <div className="flex flex-col items-center bg-slate-800/60 rounded-lg p-3">
-            <Beef className="h-5 w-5 text-emerald-400 mb-1" />
-            <span className="text-xl font-bold text-white">{data.total_animales}</span>
-            <span className="text-xs text-slate-400">Animales</span>
+          <div className="flex flex-col items-center bg-agro-bg rounded-lg p-3">
+            <Beef className="h-5 w-5 text-agro-accent mb-1" />
+            <span className="text-xl font-bold text-agro-text">{data.total_animales}</span>
+            <span className="text-xs text-agro-muted">Animales</span>
           </div>
         </div>
 
         {data.animales_por_especie.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-xs text-slate-400 uppercase tracking-wide">Por especie</p>
+            <p className="text-xs text-agro-muted uppercase tracking-wide">Por especie</p>
             {data.animales_por_especie.map((a) => (
               <div key={a.especie} className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-300">{ESPECIE_LABEL[a.especie] ?? a.especie}</span>
-                  <span className="text-slate-400">{a.total}</span>
+                  <span className="text-agro-text">{ESPECIE_LABEL[a.especie] ?? a.especie}</span>
+                  <span className="text-agro-muted">{a.total}</span>
                 </div>
-                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-agro-accent/20 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    className="h-full bg-agro-primary rounded-full transition-all"
                     style={{ width: `${(a.total / maxAnimales) * 100}%` }}
                   />
                 </div>
@@ -327,7 +336,7 @@ function CampoCard({ data }: { data: DashboardResumen }) {
             ))}
           </div>
         ) : (
-          <p className="text-slate-500 text-sm text-center py-2">Sin animales registrados.</p>
+          <p className="text-agro-muted text-sm text-center py-2">Sin animales registrados.</p>
         )}
       </CardContent>
     </Card>
@@ -340,14 +349,14 @@ function MovimientosCard({ movimientos }: { movimientos: MovimientoProximo[] }) 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base text-slate-300 flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 text-blue-400" />
+        <CardTitle className="text-base text-agro-text flex items-center gap-2">
+          <CalendarClock className="h-4 w-4 text-agro-primary" />
           Movimientos próximos (7 días)
         </CardTitle>
       </CardHeader>
       <CardContent>
         {movimientos.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-6">
+          <p className="text-agro-muted text-sm text-center py-6">
             No hay movimientos programados para los próximos 7 días.
           </p>
         ) : (
@@ -355,19 +364,19 @@ function MovimientosCard({ movimientos }: { movimientos: MovimientoProximo[] }) 
             {movimientos.map((mov) => (
               <li
                 key={mov.id}
-                className="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2.5"
+                className="flex items-center justify-between bg-agro-bg rounded-lg px-3 py-2.5"
               >
                 <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-sm text-slate-200">
+                  <div className="flex items-center gap-1.5 text-sm text-agro-text">
                     <span className="font-medium truncate max-w-[100px]">{mov.potrero_origen_nombre}</span>
-                    <ArrowRight className="h-3 w-3 text-slate-500 shrink-0" />
+                    <ArrowRight className="h-3 w-3 text-agro-muted shrink-0" />
                     <span className="font-medium truncate max-w-[100px]">{mov.potrero_destino_nombre}</span>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-agro-muted">
                     {mov.cantidad} {ESPECIE_LABEL[mov.especie] ?? mov.especie}
                   </p>
                 </div>
-                <span className="text-xs text-slate-400 shrink-0 ml-2">
+                <span className="text-xs text-agro-muted shrink-0 ml-2">
                   {formatFecha(mov.fecha_programada)}
                 </span>
               </li>
@@ -382,6 +391,7 @@ function MovimientosCard({ movimientos }: { movimientos: MovimientoProximo[] }) 
 // ── Tabla por categoría ───────────────────────────────────────────────────────
 
 function CategoriaTabla({ categorias }: { categorias: ResumenCategoria[] }) {
+  const moneda = useAuthStore((s) => s.user?.moneda ?? "UYU");
   const totalGastos = categorias
     .filter((c) => c.tipo === "gasto")
     .reduce((acc, c) => acc + parseFloat(c.total), 0);
@@ -392,20 +402,20 @@ function CategoriaTabla({ categorias }: { categorias: ResumenCategoria[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base text-slate-300">Resumen por categoría</CardTitle>
+        <CardTitle className="text-base text-agro-text">Resumen por categoría</CardTitle>
       </CardHeader>
       <CardContent>
         {categorias.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-6">Sin categorías con registros.</p>
+          <p className="text-agro-muted text-sm text-center py-6">Sin categorías con registros.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="text-left py-2 px-2 text-slate-400 font-medium">Categoría</th>
-                  <th className="text-left py-2 px-2 text-slate-400 font-medium">Tipo</th>
-                  <th className="text-right py-2 px-2 text-slate-400 font-medium">Total</th>
-                  <th className="text-right py-2 px-2 text-slate-400 font-medium">% del tipo</th>
+                <tr className="border-b border-agro-accent/20">
+                  <th className="text-left py-2 px-2 text-agro-muted font-medium">Categoría</th>
+                  <th className="text-left py-2 px-2 text-agro-muted font-medium">Tipo</th>
+                  <th className="text-right py-2 px-2 text-agro-muted font-medium">Total</th>
+                  <th className="text-right py-2 px-2 text-agro-muted font-medium">% del tipo</th>
                 </tr>
               </thead>
               <tbody>
@@ -416,7 +426,7 @@ function CategoriaTabla({ categorias }: { categorias: ResumenCategoria[] }) {
                   return (
                     <tr
                       key={cat.categoria_id}
-                      className="border-b border-slate-800 hover:bg-slate-800/40 transition-colors"
+                      className="border-b border-agro-accent/10 hover:bg-agro-bg transition-colors"
                     >
                       <td className="py-2.5 px-2">
                         <div className="flex items-center gap-2">
@@ -424,24 +434,24 @@ function CategoriaTabla({ categorias }: { categorias: ResumenCategoria[] }) {
                             className="h-2.5 w-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: cat.color }}
                           />
-                          <span className="text-slate-200">{cat.nombre}</span>
+                          <span className="text-agro-text">{cat.nombre}</span>
                         </div>
                       </td>
                       <td className="py-2.5 px-2">
                         <span
                           className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                             cat.tipo === "gasto"
-                              ? "text-red-300 ring-red-400/30 bg-red-400/10"
-                              : "text-emerald-300 ring-emerald-400/30 bg-emerald-400/10"
+                              ? "text-red-600 ring-red-400/30 bg-red-50"
+                              : "text-agro-primary ring-agro-accent/40 bg-agro-accent/10"
                           }`}
                         >
                           {cat.tipo === "gasto" ? "Gasto" : "Ingreso"}
                         </span>
                       </td>
-                      <td className="py-2.5 px-2 text-right font-medium text-slate-200">
-                        {formatARS(total)}
+                      <td className="py-2.5 px-2 text-right font-medium text-agro-text">
+                        {formatMoneda(total, moneda)}
                       </td>
-                      <td className="py-2.5 px-2 text-right text-slate-400">{pct}%</td>
+                      <td className="py-2.5 px-2 text-right text-agro-muted">{pct}%</td>
                     </tr>
                   );
                 })}
@@ -451,6 +461,191 @@ function CategoriaTabla({ categorias }: { categorias: ResumenCategoria[] }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ── Dashboard Negocio ─────────────────────────────────────────────────────────
+
+interface DashboardNegocioProps {
+  data: DashboardResumen;
+  moneda: string;
+  ingresosCur: number;
+  gastosCur: number;
+}
+
+function DashboardNegocio({ data, moneda, ingresosCur, gastosCur }: DashboardNegocioProps) {
+  const balance = parseFloat(data.balance);
+  const margen = ingresosCur - gastosCur;
+
+  const { data: clientes = [] } = useQuery({
+    queryKey: ["clientes"],
+    queryFn: getClientes,
+  });
+
+  const totalPendiente = clientes
+    .flatMap((c) => c.cuentas ?? [])
+    .filter((cu) => !cu.pagado)
+    .reduce((acc, cu) => acc + cu.monto, 0);
+
+  const totalCobrado = clientes
+    .flatMap((c) => c.cuentas ?? [])
+    .filter((cu) => cu.pagado)
+    .reduce((acc, cu) => acc + cu.monto, 0);
+
+  const { data: proveedores = [] } = useQuery({
+    queryKey: ["proveedores"],
+    queryFn: getProveedores,
+  });
+
+  const totalPorPagar = proveedores
+    .flatMap((p) => p.cuentas_pagar ?? [])
+    .filter((cu) => !cu.pagado)
+    .reduce((acc, cu) => acc + cu.monto, 0);
+
+  const totalPagadoProveedores = proveedores
+    .flatMap((p) => p.cuentas_pagar ?? [])
+    .filter((cu) => cu.pagado)
+    .reduce((acc, cu) => acc + cu.monto, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Fila 1 — KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <KpiCard
+          title="Facturación del mes"
+          value={formatMoneda(ingresosCur, moneda)}
+          icon={<TrendingUp className="h-5 w-5 text-emerald-400" />}
+          valueColor="text-emerald-400"
+        />
+        <KpiCard
+          title="Gastos del mes"
+          value={formatMoneda(gastosCur, moneda)}
+          icon={<TrendingDown className="h-5 w-5 text-red-400" />}
+          valueColor="text-red-400"
+        />
+        <KpiCard
+          title="Margen bruto del mes"
+          value={formatMoneda(margen, moneda)}
+          icon={
+            margen >= 0
+              ? <TrendingUp className="h-5 w-5 text-emerald-400" />
+              : <TrendingDown className="h-5 w-5 text-red-400" />
+          }
+          valueColor={margen >= 0 ? "text-emerald-400" : "text-red-400"}
+        />
+        <KpiCard
+          title="Balance total"
+          value={formatMoneda(data.balance, moneda)}
+          icon={<Wallet className={`h-5 w-5 ${balance >= 0 ? "text-emerald-400" : "text-red-400"}`} />}
+          valueColor={balance >= 0 ? "text-emerald-400" : "text-red-400"}
+        />
+        <KpiCard
+          title="Por cobrar"
+          value={formatMoneda(totalPendiente, moneda)}
+          icon={<Clock className="h-5 w-5 text-amber-400" />}
+          valueColor="text-amber-400"
+        />
+        <KpiCard
+          title="Cobrado"
+          value={formatMoneda(totalCobrado, moneda)}
+          icon={<CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+          valueColor="text-emerald-400"
+        />
+        <KpiCard
+          title="Por pagar"
+          value={formatMoneda(totalPorPagar, moneda)}
+          icon={<AlertCircle className="h-5 w-5 text-red-400" />}
+          valueColor="text-red-400"
+        />
+        <KpiCard
+          title="Pagado proveedores"
+          value={formatMoneda(totalPagadoProveedores, moneda)}
+          icon={<PackageCheck className="h-5 w-5 text-agro-muted" />}
+          valueColor="text-agro-muted"
+        />
+      </div>
+
+      {/* Fila 2 — Gráficas */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <BarChartCard data={data.por_mes} />
+        <PieChartCard categorias={data.por_categoria} />
+      </div>
+
+      {/* Fila 3 — Tabla categorías */}
+      <CategoriaTabla categorias={data.por_categoria} />
+    </div>
+  );
+}
+
+// ── Dashboard Productor ───────────────────────────────────────────────────────
+
+interface DashboardProductorProps {
+  data: DashboardResumen;
+  moneda: string;
+  ingresosCur: number;
+  ingresosPrev: number;
+  gastosCur: number;
+  gastosPrev: number;
+  balance: number;
+  user: { perfil?: string } | null;
+}
+
+function DashboardProductor({
+  data,
+  moneda,
+  ingresosCur,
+  ingresosPrev,
+  gastosCur,
+  gastosPrev,
+  balance,
+  user,
+}: DashboardProductorProps) {
+  return (
+    <div className="space-y-6">
+      {/* Fila 1 — KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <KpiCard
+          title="Balance total"
+          value={formatMoneda(data.balance, moneda)}
+          icon={<Wallet className={`h-5 w-5 ${balance >= 0 ? "text-emerald-400" : "text-red-400"}`} />}
+          valueColor={balance >= 0 ? "text-emerald-400" : "text-red-400"}
+        />
+        <KpiCard
+          title="Total ingresos"
+          value={formatMoneda(data.total_ingresos, moneda)}
+          icon={<TrendingUp className="h-5 w-5 text-emerald-400" />}
+          valueColor="text-emerald-400"
+          change={pctChange(ingresosCur, ingresosPrev)}
+        />
+        <KpiCard
+          title="Total gastos"
+          value={formatMoneda(data.total_gastos, moneda)}
+          icon={<TrendingDown className="h-5 w-5 text-red-400" />}
+          valueColor="text-red-400"
+          change={pctChange(gastosCur, gastosPrev)}
+        />
+        <KpiCard
+          title="Total animales"
+          value={data.total_animales.toLocaleString("es-AR")}
+          icon={<Beef className="h-5 w-5 text-amber-400" />}
+        />
+      </div>
+
+      {/* Fila 2 — Gráficas */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <BarChartCard data={data.por_mes} />
+        <PieChartCard categorias={data.por_categoria} />
+      </div>
+
+      {/* Fila 3 — Campo y movimientos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <CampoCard data={data} />
+        <MovimientosCard movimientos={data.movimientos_proximos} />
+      </div>
+
+      {/* Fila 4 — Tabla categorías */}
+      <CategoriaTabla categorias={data.por_categoria} />
+    </div>
   );
 }
 
@@ -492,65 +687,38 @@ export default function DashboardPage() {
   const gastosPrev = parseFloat(prevMes?.gastos ?? "0");
 
   const balance = parseFloat(data.balance);
+  const moneda = user?.moneda ?? "UYU";
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold text-agro-text">
           Hola, {user?.nombre ?? "…"} 👋
         </h1>
-        <p className="text-slate-400 mt-1">Panel de control — 360 Finance</p>
+        <p className="text-agro-muted mt-1">Panel de control — 360 Finance</p>
       </div>
 
       {isEmpty ? (
-        <EmptyState />
+        <EmptyState perfil={user?.perfil} />
+      ) : user?.perfil === "negocio" ? (
+        <DashboardNegocio
+          data={data}
+          moneda={moneda}
+          ingresosCur={ingresosCur}
+          gastosCur={gastosCur}
+        />
       ) : (
-        <>
-          {/* Fila 1 — KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <KpiCard
-              title="Balance total"
-              value={formatARS(data.balance)}
-              icon={<Wallet className={`h-5 w-5 ${balance >= 0 ? "text-emerald-400" : "text-red-400"}`} />}
-              valueColor={balance >= 0 ? "text-emerald-400" : "text-red-400"}
-            />
-            <KpiCard
-              title="Total ingresos"
-              value={formatARS(data.total_ingresos)}
-              icon={<TrendingUp className="h-5 w-5 text-emerald-400" />}
-              valueColor="text-emerald-400"
-              change={pctChange(ingresosCur, ingresosPrev)}
-            />
-            <KpiCard
-              title="Total gastos"
-              value={formatARS(data.total_gastos)}
-              icon={<TrendingDown className="h-5 w-5 text-red-400" />}
-              valueColor="text-red-400"
-              change={pctChange(gastosCur, gastosPrev)}
-            />
-            <KpiCard
-              title="Total animales"
-              value={data.total_animales.toLocaleString("es-AR")}
-              icon={<Beef className="h-5 w-5 text-amber-400" />}
-            />
-          </div>
-
-          {/* Fila 2 — Gráficas */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <BarChartCard data={data.por_mes} />
-            <PieChartCard categorias={data.por_categoria} />
-          </div>
-
-          {/* Fila 3 — Campo y movimientos */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <CampoCard data={data} />
-            <MovimientosCard movimientos={data.movimientos_proximos} />
-          </div>
-
-          {/* Fila 4 — Tabla categorías */}
-          <CategoriaTabla categorias={data.por_categoria} />
-        </>
+        <DashboardProductor
+          data={data}
+          moneda={moneda}
+          ingresosCur={ingresosCur}
+          ingresosPrev={ingresosPrev}
+          gastosCur={gastosCur}
+          gastosPrev={gastosPrev}
+          balance={balance}
+          user={user}
+        />
       )}
     </div>
   );

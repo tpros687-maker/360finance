@@ -65,8 +65,8 @@ export default function RegistrosPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white">Registros</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Historial de movimientos financieros</p>
+          <h1 className="text-2xl font-bold text-agro-text">Registros</h1>
+          <p className="text-agro-muted text-sm mt-0.5">Historial de movimientos financieros</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -89,15 +89,15 @@ export default function RegistrosPage() {
                   className="fixed inset-0 z-10"
                   onClick={() => setExportMenuOpen(false)}
                 />
-                <div className="absolute right-0 top-full mt-1 z-20 w-36 rounded-lg border border-slate-700 bg-slate-800 shadow-xl overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 z-20 w-36 rounded-lg border border-agro-accent/20 bg-white shadow-xl overflow-hidden">
                   <button
-                    className="w-full px-4 py-2.5 text-sm text-left text-slate-200 hover:bg-slate-700 transition-colors"
+                    className="w-full px-4 py-2.5 text-sm text-left text-agro-text hover:bg-agro-bg transition-colors"
                     onClick={() => handleExport("excel")}
                   >
                     Excel (.xlsx)
                   </button>
                   <button
-                    className="w-full px-4 py-2.5 text-sm text-left text-slate-200 hover:bg-slate-700 transition-colors"
+                    className="w-full px-4 py-2.5 text-sm text-left text-agro-text hover:bg-agro-bg transition-colors"
                     onClick={() => handleExport("pdf")}
                   >
                     PDF

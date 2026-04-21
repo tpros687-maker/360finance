@@ -56,6 +56,7 @@ class RegistroCreate(BaseModel):
     categoria_id: int
     tipo: TipoMovimiento
     monto: Decimal
+    moneda: str = "UYU"
     fecha: date
     descripcion: Optional[str] = None
     comprobante_url: Optional[str] = None
@@ -73,6 +74,7 @@ class RegistroUpdate(BaseModel):
     categoria_id: Optional[int] = None
     tipo: Optional[TipoMovimiento] = None
     monto: Optional[Decimal] = None
+    moneda: Optional[str] = None
     fecha: Optional[date] = None
     descripcion: Optional[str] = None
     comprobante_url: Optional[str] = None
@@ -95,6 +97,7 @@ class RegistroRead(BaseModel):
     potrero: Optional[PotreroSimpleRead]
     tipo: TipoMovimiento
     monto: Decimal
+    moneda: str
     fecha: date
     descripcion: Optional[str]
     comprobante_url: Optional[str]

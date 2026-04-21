@@ -28,6 +28,7 @@ class Registro(Base):
         SAEnum(TipoMovimiento, name="tipomovimiento"), nullable=False
     )
     monto: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    moneda: Mapped[str] = mapped_column(String(3), nullable=False, server_default="UYU")
     fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     descripcion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     comprobante_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)

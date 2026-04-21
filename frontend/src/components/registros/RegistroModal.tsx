@@ -28,6 +28,7 @@ const schema = z.object({
   tipo: z.enum(["gasto", "ingreso"]),
   categoria_id: z.coerce.number().min(1, "Seleccioná una categoría"),
   monto: z.coerce.number().positive("El monto debe ser mayor a 0"),
+  moneda: z.enum(["UYU", "USD"]).default("UYU"),
   fecha: z.string().min(1, "Seleccioná una fecha"),
   descripcion: z.string().optional(),
   potrero_id: z.coerce.number().optional().nullable(),
@@ -69,6 +70,7 @@ export function RegistroModal({ open, onClose, registro, defaultTipo = "gasto" }
   });
 
   const tipo = watch("tipo");
+  const moneda = watch("moneda");
 
   useEffect(() => {
     if (registro) {
@@ -76,6 +78,7 @@ export function RegistroModal({ open, onClose, registro, defaultTipo = "gasto" }
         tipo: registro.tipo,
         categoria_id: registro.categoria_id,
         monto: parseFloat(registro.monto),
+        moneda: (registro.moneda as "UYU" | "USD") ?? "UYU",
         fecha: registro.fecha,
         descripcion: registro.descripcion ?? "",
         potrero_id: registro.potrero_id ?? null,
@@ -85,6 +88,7 @@ export function RegistroModal({ open, onClose, registro, defaultTipo = "gasto" }
         tipo: defaultTipo,
         categoria_id: undefined,
         monto: undefined,
+        moneda: "UYU",
         fecha: new Date().toISOString().split("T")[0],
         descripcion: "",
         potrero_id: null,
@@ -113,6 +117,7 @@ export function RegistroModal({ open, onClose, registro, defaultTipo = "gasto" }
         categoria_id: data.categoria_id,
         tipo: data.tipo,
         monto: data.monto,
+        moneda: data.moneda,
         fecha: data.fecha,
         descripcion: data.descripcion || undefined,
         potrero_id: data.potrero_id || null,
@@ -286,7 +291,23 @@ export function RegistroModal({ open, onClose, registro, defaultTipo = "gasto" }
 
           {/* Monto */}
           <div className="space-y-1.5">
-            <Label htmlFor="monto">Monto ($)</Label>
+            <Label htmlFor="monto">Monto</Label>
+            <div className="flex rounded-lg border border-slate-700 overflow-hidden mb-1.5">
+              {(["UYU", "USD"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setValue("moneda", m)}
+                  className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                    moneda === m
+                      ? "bg-brand-500/20 text-brand-400 border-brand-500/40"
+                      : "text-slate-400 hover:bg-slate-800"
+                  }`}
+                >
+                  {m === "UYU" ? "$ UYU" : "US$ USD"}
+                </button>
+              ))}
+            </div>
             <Input
               id="monto"
               type="number"
@@ -342,11 +363,7 @@ export function RegistroModal({ open, onClose, registro, defaultTipo = "gasto" }
               <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 space-y-2">
                 {isImagePreview && (
                   <img
-                    src={
-                      previewUrl!.startsWith("blob:")
-                        ? previewUrl!
-                        : `http://localhost:8000${previewUrl}`
-                    }
+                    src={previewUrl!}
                     alt="Comprobante"
                     className="max-h-40 rounded-md object-contain mx-auto"
                   />

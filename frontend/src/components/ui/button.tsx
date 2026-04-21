@@ -4,16 +4,16 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-agro-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700",
+        default: "bg-agro-primary text-white hover:bg-agro-primary/90 active:bg-agro-primary/80",
         destructive: "bg-red-600 text-white hover:bg-red-700",
-        outline: "border border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800",
-        secondary: "bg-slate-700 text-slate-100 hover:bg-slate-600",
-        ghost: "text-slate-300 hover:bg-slate-800 hover:text-white",
-        link: "text-brand-400 underline-offset-4 hover:underline",
+        outline: "border border-agro-accent/30 bg-transparent text-agro-text hover:bg-agro-accent/10 hover:text-agro-primary",
+        secondary: "bg-agro-bg text-agro-text hover:bg-agro-accent/20",
+        ghost: "text-agro-muted hover:bg-agro-accent/10 hover:text-agro-primary",
+        link: "text-agro-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",

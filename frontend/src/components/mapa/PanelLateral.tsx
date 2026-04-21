@@ -206,11 +206,11 @@ export function PanelLateral() {
   if (!panelOpen || !potrero) return null;
 
   return (
-    <div className="absolute top-0 right-0 h-full w-80 bg-slate-900 border-l border-slate-700 flex flex-col z-10 overflow-hidden">
+    <div className="absolute top-0 right-0 h-full w-80 bg-white border-l border-agro-accent/20 flex flex-col z-10 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 flex-shrink-0">
-        <h2 className="text-white font-semibold text-sm truncate">{potrero.nombre || "Nuevo potrero"}</h2>
-        <button onClick={() => setPanelOpen(false)} className="text-slate-400 hover:text-white">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-agro-accent/20 flex-shrink-0">
+        <h2 className="text-agro-text font-semibold text-sm truncate">{potrero.nombre || "Nuevo potrero"}</h2>
+        <button onClick={() => setPanelOpen(false)} className="text-agro-muted hover:text-agro-text">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -220,9 +220,9 @@ export function PanelLateral() {
 
         {/* En descanso banner */}
         {potrero.en_descanso && (
-          <div className="flex items-center gap-2 bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2">
+          <div className="flex items-center gap-2 bg-agro-bg border border-agro-accent/20 rounded-md px-3 py-2">
             <span className="text-base leading-none">💤</span>
-            <span className="text-slate-200 text-xs font-medium">
+            <span className="text-agro-text text-xs font-medium">
               {potrero.fecha_descanso
                 ? `En descanso hace ${diasDescanso(potrero.fecha_descanso)} día${diasDescanso(potrero.fecha_descanso) !== 1 ? "s" : ""}`
                 : "En descanso"}
@@ -232,9 +232,9 @@ export function PanelLateral() {
 
         {/* Hectáreas (read-only) */}
         {potrero.hectareas !== null && potrero.hectareas !== undefined && (
-          <div className="flex items-center justify-between bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2">
-            <span className="text-slate-400 text-xs">Superficie</span>
-            <span className="text-white text-sm font-semibold">
+          <div className="flex items-center justify-between bg-agro-bg border border-agro-accent/20 rounded-md px-3 py-2">
+            <span className="text-agro-muted text-xs">Superficie</span>
+            <span className="text-agro-text text-sm font-semibold">
               {Number(potrero.hectareas).toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha
             </span>
           </div>
@@ -242,20 +242,20 @@ export function PanelLateral() {
 
         {/* Nombre */}
         <div>
-          <Label className="text-slate-300 text-xs">Nombre</Label>
+          <Label className="text-agro-muted text-xs">Nombre</Label>
           <Input
             {...register("nombre")}
-            className="mt-1 bg-slate-800 border-slate-600 text-white text-sm"
+            className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
             placeholder="Ej: Potrero Norte"
           />
         </div>
 
         {/* Tipo */}
         <div>
-          <Label className="text-slate-300 text-xs">Tipo</Label>
+          <Label className="text-agro-muted text-xs">Tipo</Label>
           <select
             {...register("tipo")}
-            className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-md px-3 py-2"
+            className="mt-1 w-full bg-agro-bg border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2"
           >
             <option value="agricultura">Agricultura</option>
             <option value="ganaderia">Ganadería</option>
@@ -265,7 +265,7 @@ export function PanelLateral() {
 
         {/* Estado del pasto */}
         <div>
-          <Label className="text-slate-300 text-xs">Estado del pasto</Label>
+          <Label className="text-agro-muted text-xs">Estado del pasto</Label>
           <div className="mt-1 flex gap-2">
             {(["bueno", "regular", "malo"] as EstadoPasto[]).map((est) => {
               const val = watch("estado_pasto");
@@ -276,8 +276,8 @@ export function PanelLateral() {
                   onClick={() => setValue("estado_pasto", est)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
                     val === est
-                      ? "border-white text-white bg-slate-700"
-                      : "border-slate-600 text-slate-400 hover:border-slate-400"
+                      ? "border-agro-primary text-agro-text bg-agro-bg"
+                      : "border-agro-accent/20 text-agro-muted hover:border-agro-accent/40"
                   }`}
                 >
                   <span className={`w-2 h-2 rounded-full ${ESTADO_COLORS[est]}`} />
@@ -297,14 +297,14 @@ export function PanelLateral() {
               {...register("tiene_suplementacion")}
               className="accent-emerald-500"
             />
-            <Label htmlFor="tiene_suplementacion" className="text-slate-300 text-xs cursor-pointer">
+            <Label htmlFor="tiene_suplementacion" className="text-agro-muted text-xs cursor-pointer">
               Suplementación activa
             </Label>
           </div>
           {tieneSuplementacion && (
             <Input
               {...register("suplementacion_detalle")}
-              className="mt-2 bg-slate-800 border-slate-600 text-white text-sm"
+              className="mt-2 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
               placeholder="Detalle de suplementación..."
             />
           )}
@@ -319,28 +319,28 @@ export function PanelLateral() {
               {...register("tiene_franjas")}
               className="accent-emerald-500"
             />
-            <Label htmlFor="tiene_franjas" className="text-slate-300 text-xs cursor-pointer">
+            <Label htmlFor="tiene_franjas" className="text-agro-muted text-xs cursor-pointer">
               Gestión por franjas
             </Label>
           </div>
           {tieneFranjas && (
             <div className="mt-2 grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-slate-400 text-xs">Total</Label>
+                <Label className="text-agro-muted text-xs">Total</Label>
                 <Input
                   type="number"
                   {...register("cantidad_franjas", { valueAsNumber: true })}
-                  className="mt-1 bg-slate-800 border-slate-600 text-white text-sm"
+                  className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
                   placeholder="0"
                   min={0}
                 />
               </div>
               <div>
-                <Label className="text-slate-400 text-xs">Usadas</Label>
+                <Label className="text-agro-muted text-xs">Usadas</Label>
                 <Input
                   type="number"
                   {...register("franjas_usadas", { valueAsNumber: true })}
-                  className="mt-1 bg-slate-800 border-slate-600 text-white text-sm"
+                  className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
                   placeholder="0"
                   min={0}
                 />
@@ -352,10 +352,10 @@ export function PanelLateral() {
         {/* Animales */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <Label className="text-slate-300 text-xs">
+            <Label className="text-agro-muted text-xs">
               Animales
               {totalAnimales > 0 && (
-                <span className="ml-1.5 text-slate-500">({totalAnimales} total)</span>
+                <span className="ml-1.5 text-agro-muted/60">({totalAnimales} total)</span>
               )}
             </Label>
             <button
@@ -370,19 +370,19 @@ export function PanelLateral() {
 
           <div className="space-y-1">
             {animales.length === 0 && nuevasFilas.length === 0 && (
-              <p className="text-slate-500 text-xs italic">Sin animales registrados</p>
+              <p className="text-agro-muted text-xs italic">Sin animales registrados</p>
             )}
             {animales.map((a) => (
               <div
                 key={a.id}
-                className="grid grid-cols-[1fr_56px_28px] items-center gap-1.5 bg-slate-800 rounded-md px-2 py-1.5"
+                className="grid grid-cols-[1fr_56px_28px] items-center gap-1.5 bg-agro-bg rounded-md px-2 py-1.5"
               >
-                <span className="text-slate-200 text-xs truncate">{a.especie}</span>
-                <span className="text-slate-400 text-xs text-right">{a.cantidad} cab.</span>
+                <span className="text-agro-text text-xs truncate">{a.especie}</span>
+                <span className="text-agro-muted text-xs text-right">{a.cantidad} cab.</span>
                 <button
                   type="button"
                   onClick={() => deleteAnimalMutation.mutate(a.id)}
-                  className="flex items-center justify-center text-slate-500 hover:text-red-400"
+                  className="flex items-center justify-center text-agro-muted hover:text-red-400"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -392,14 +392,14 @@ export function PanelLateral() {
             {nuevasFilas.map((fila, i) => (
               <div
                 key={i}
-                className="grid grid-cols-[1fr_64px_28px_28px] items-center gap-1.5 bg-slate-800/80 border border-emerald-700/40 rounded-md px-2 py-1.5"
+                className="grid grid-cols-[1fr_64px_28px_28px] items-center gap-1.5 bg-agro-bg border border-emerald-700/40 rounded-md px-2 py-1.5"
               >
                 <input
                   type="text"
                   value={fila.especie}
                   onChange={(e) => actualizarFila(i, "especie", e.target.value)}
                   placeholder="Ej: Vacas, Toros..."
-                  className="bg-transparent text-white text-xs outline-none placeholder-slate-600 w-full"
+                  className="bg-transparent text-agro-text text-xs outline-none placeholder-agro-muted/50 w-full"
                   autoFocus={i === nuevasFilas.length - 1}
                 />
                 <input
@@ -407,7 +407,7 @@ export function PanelLateral() {
                   value={fila.cantidad}
                   min={1}
                   onChange={(e) => actualizarFila(i, "cantidad", Number(e.target.value))}
-                  className="bg-slate-700 border border-slate-600 text-white text-xs rounded px-1.5 py-0.5 w-full text-right outline-none"
+                  className="bg-agro-bg border border-agro-accent/20 text-agro-text text-xs rounded px-1.5 py-0.5 w-full text-right outline-none"
                 />
                 <button
                   type="button"
@@ -421,7 +421,7 @@ export function PanelLateral() {
                 <button
                   type="button"
                   onClick={() => eliminarFila(i)}
-                  className="flex items-center justify-center text-slate-500 hover:text-red-400"
+                  className="flex items-center justify-center text-agro-muted hover:text-red-400"
                   title="Cancelar"
                 >
                   <X className="w-3 h-3" />
@@ -431,8 +431,8 @@ export function PanelLateral() {
 
             {totalAnimales > 0 && (
               <div className="flex justify-end pt-1">
-                <span className="text-xs text-slate-400 font-medium">
-                  Total: <span className="text-white">{totalAnimales}</span> animales
+                <span className="text-xs text-agro-muted font-medium">
+                  Total: <span className="text-agro-text">{totalAnimales}</span> animales
                 </span>
               </div>
             )}
@@ -441,34 +441,34 @@ export function PanelLateral() {
 
         {/* Observaciones */}
         <div>
-          <Label className="text-slate-300 text-xs">Observaciones</Label>
+          <Label className="text-agro-muted text-xs">Observaciones</Label>
           <textarea
             {...register("observaciones")}
             rows={3}
-            className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-md px-3 py-2 resize-none"
+            className="mt-1 w-full bg-agro-bg border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2 resize-none"
             placeholder="Notas adicionales..."
           />
         </div>
 
         {/* ── Historial de movimientos ───────────────────────────────────── */}
-        <div className="border border-slate-700 rounded-md overflow-hidden">
+        <div className="border border-agro-accent/20 rounded-md overflow-hidden">
           <button
             type="button"
             onClick={() => setHistorialExpanded((v) => !v)}
-            className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-800/60 hover:bg-slate-800 transition-colors text-left"
+            className="w-full flex items-center justify-between px-3 py-2.5 bg-agro-bg hover:bg-agro-bg/80 transition-colors text-left"
           >
-            <span className="text-slate-300 text-xs font-medium">Historial de movimientos</span>
+            <span className="text-agro-muted text-xs font-medium">Historial de movimientos</span>
             {historialExpanded ? (
-              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronUp className="w-3.5 h-3.5 text-agro-muted" />
             ) : (
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronDown className="w-3.5 h-3.5 text-agro-muted" />
             )}
           </button>
 
           {historialExpanded && (
-            <div className="divide-y divide-slate-700/50">
+            <div className="divide-y divide-agro-accent/10">
               {historialMovimientos.length === 0 ? (
-                <p className="text-slate-500 text-xs italic px-3 py-3">
+                <p className="text-agro-muted text-xs italic px-3 py-3">
                   Sin movimientos registrados
                 </p>
               ) : (
@@ -497,10 +497,10 @@ export function PanelLateral() {
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-slate-200 font-medium truncate">
+                            <span className="text-agro-text font-medium truncate">
                               {mov.cantidad} {mov.especie}
                             </span>
-                            <span className="text-slate-500 text-[10px] shrink-0">
+                            <span className="text-agro-muted text-[10px] shrink-0">
                               {formatFecha(fecha)}
                             </span>
                           </div>
@@ -511,12 +511,12 @@ export function PanelLateral() {
                                   ? "bg-emerald-500/15 text-emerald-400"
                                   : mov.estado === "programado"
                                   ? "bg-yellow-500/15 text-yellow-400"
-                                  : "bg-slate-500/15 text-slate-400"
+                                  : "bg-agro-muted/10 text-agro-muted"
                               }`}
                             >
                               {mov.estado}
                             </span>
-                            <span className="text-slate-500 text-[10px] truncate">
+                            <span className="text-agro-muted text-[10px] truncate">
                               {esSalida ? "→" : "←"} {contraparte}
                             </span>
                           </div>
@@ -529,7 +529,7 @@ export function PanelLateral() {
                     <button
                       type="button"
                       onClick={() => setHistorialShowAll(true)}
-                      className="w-full px-3 py-2 text-xs text-brand-400 hover:text-brand-300 hover:bg-slate-800 transition-colors text-left"
+                      className="w-full px-3 py-2 text-xs text-agro-primary hover:text-agro-primary/80 hover:bg-agro-bg transition-colors text-left"
                     >
                       Ver todos ({historialMovimientos.length} movimientos)
                     </button>
@@ -538,7 +538,7 @@ export function PanelLateral() {
                     <button
                       type="button"
                       onClick={() => setHistorialShowAll(false)}
-                      className="w-full px-3 py-2 text-xs text-slate-500 hover:text-slate-400 hover:bg-slate-800 transition-colors text-left"
+                      className="w-full px-3 py-2 text-xs text-agro-muted hover:text-agro-text hover:bg-agro-bg transition-colors text-left"
                     >
                       Mostrar menos
                     </button>
@@ -551,7 +551,7 @@ export function PanelLateral() {
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-slate-700 flex flex-col gap-2 flex-shrink-0">
+      <div className="px-4 py-3 border-t border-agro-accent/20 flex flex-col gap-2 flex-shrink-0">
         <Button
           type="button"
           onClick={onSave}
@@ -564,7 +564,7 @@ export function PanelLateral() {
           type="button"
           variant="outline"
           onClick={() => setModalMovimientoOpen(true)}
-          className="w-full border-slate-600 text-slate-300 hover:bg-slate-800 text-sm"
+          className="w-full border-agro-accent/20 text-agro-muted hover:bg-agro-bg text-sm"
         >
           <ArrowRightLeft className="w-4 h-4 mr-2" />
           Programar movimiento

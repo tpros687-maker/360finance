@@ -12,6 +12,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useAuthStore } from "@/store/authStore";
 import { register as registerUser, login, getMe, parseApiError } from "@/lib/authApi";
 import { toast } from "@/hooks/useToast";
+import { cn } from "@/lib/utils";
+
+const PERFILES = [
+  { value: "productor", label: "Productor Agropecuario" },
+  { value: "negocio", label: "Veterinaria / Acopio" },
+] as const;
 
 const schema = z
   .object({
@@ -20,6 +26,7 @@ const schema = z
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Mínimo 8 caracteres"),
     confirm: z.string(),
+    perfil: z.enum(["productor", "negocio"]).default("productor"),
   })
   .refine((d) => d.password === d.confirm, {
     message: "Las contraseñas no coinciden",
@@ -35,12 +42,13 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { perfil: "productor" } });
 
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
-      await registerUser({ email: data.email, nombre: data.nombre, apellido: data.apellido, password: data.password });
+      await registerUser({ email: data.email, nombre: data.nombre, apellido: data.apellido, password: data.password, perfil: data.perfil });
       const tokens = await login({ email: data.email, password: data.password });
       setTokens(tokens.access_token, tokens.refresh_token);
       const user = await getMe();
@@ -103,6 +111,26 @@ export default function RegisterPage() {
                 <Label htmlFor="confirm">Confirmar contraseña</Label>
                 <Input id="confirm" type="password" placeholder="Repetí tu contraseña" autoComplete="new-password" {...register("confirm")} />
                 {errors.confirm && <p className="text-xs text-red-400">{errors.confirm.message}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Tipo de usuario</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {PERFILES.map(({ value, label }) => (
+                    <label
+                      key={value}
+                      className={cn(
+                        "flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
+                        watch("perfil") === value
+                          ? "border-brand-500 bg-brand-500/10 text-brand-400"
+                          : "border-slate-700 text-slate-400 hover:border-slate-500"
+                      )}
+                    >
+                      <input type="radio" value={value} {...register("perfil")} className="sr-only" />
+                      {label}
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <Button type="submit" className="w-full" disabled={mutation.isPending}>
