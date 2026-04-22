@@ -39,7 +39,7 @@ const queryClient = new QueryClient({
 
 function AppRoutes() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+    <Suspense fallback={<div className="min-h-screen bg-agro-bg" />}>
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
