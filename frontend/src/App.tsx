@@ -19,7 +19,6 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const RegistrosPage = lazy(() => import("@/pages/RegistrosPage"));
 const MapaPage = lazy(() => import("@/pages/MapaPage"));
 const AsistentePage = lazy(() => import("@/pages/AsistentePage"));
-const PlaceholderPage = lazy(() => import("@/pages/PlaceholderPage"));
 const SSOPage = lazy(() => import("@/pages/SSOPage"));
 const OnboardingPage = lazy(() => import("@/pages/OnboardingPage"));
 const ClientesPage = lazy(() => import("@/pages/ClientesPage"));

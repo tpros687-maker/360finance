@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Leaf, CheckCircle2, Clock, Loader2, CreditCard } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
-import api from "@/lib/axios";
+import { api } from "@/lib/axios";
 
 const FEATURES_BASE = [
   "Registros de gastos e ingresos",

@@ -32,7 +32,7 @@ function formatFecha(fecha: string) {
 
 export function RegistrosTable({ data, isLoading, onEdit }: Props) {
   const queryClient = useQueryClient();
-  const { filters, setFilters } = useRegistrosStore();
+  const { setFilters } = useRegistrosStore();
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 

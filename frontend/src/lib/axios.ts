@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import axios, { type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/store/authStore";
 

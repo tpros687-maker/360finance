@@ -587,7 +587,6 @@ interface DashboardProductorProps {
   gastosCur: number;
   gastosPrev: number;
   balance: number;
-  user: { perfil?: string } | null;
 }
 
 function DashboardProductor({
@@ -598,7 +597,6 @@ function DashboardProductor({
   gastosCur,
   gastosPrev,
   balance,
-  user,
 }: DashboardProductorProps) {
   return (
     <div className="space-y-6">
@@ -717,7 +715,6 @@ export default function DashboardPage() {
           gastosCur={gastosCur}
           gastosPrev={gastosPrev}
           balance={balance}
-          user={user}
         />
       )}
     </div>

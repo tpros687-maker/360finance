@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useMapaStore } from "@/store/mapaStore";
 import { updatePotrero, deletePotrero, getMovimientosByPotrero } from "@/lib/potrerosApi";
 import { getAnimales, createAnimal, deleteAnimal } from "@/lib/animalesApi";
-import type { PotreroUpdate, AnimalCreate, TipoPotrero, EstadoPasto } from "@/types/mapa";
+import type { PotreroUpdate, AnimalCreate, EstadoPasto } from "@/types/mapa";
 import { toast } from "@/hooks/useToast";
 
 const ESTADO_COLORS: Record<EstadoPasto, string> = {

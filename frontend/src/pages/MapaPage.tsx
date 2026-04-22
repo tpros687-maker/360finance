@@ -1,4 +1,5 @@
-import { useEffect, useRef, useCallback } from "react";
+/// <reference types="vite/client" />
+import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import turfArea from "@turf/area";
@@ -17,7 +18,7 @@ import { ModalMovimiento } from "@/components/mapa/ModalMovimiento";
 import { PuntosToolbar } from "@/components/mapa/PuntosToolbar";
 import { MovimientosPanel } from "@/components/mapa/MovimientosPanel";
 import { ElementosPanel } from "@/components/mapa/ElementosPanel";
-import type { Potrero, PuntoInteres, TipoPunto, GeoJSONPoint } from "@/types/mapa";
+import type { Potrero, TipoPunto, GeoJSONPoint } from "@/types/mapa";
 import { toast } from "@/hooks/useToast";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string;
@@ -94,8 +95,6 @@ export default function MapaPage() {
     setMovimientos,
     addPotrero,
     selectPotrero,
-    selectedPotreroId,
-    panelOpen,
     activePuntoTool,
     setActivePuntoTool,
     addPunto,
