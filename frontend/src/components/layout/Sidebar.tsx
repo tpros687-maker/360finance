@@ -8,9 +8,6 @@ import {
   Leaf,
   Users,
   Truck,
-  PawPrint,
-  ArrowRightLeft,
-  BarChart2,
   HelpCircle,
   Package,
   CreditCard,
@@ -30,31 +27,8 @@ const BASE_NAV = [
   { to: "/acerca",       label: "Guía / ¿Qué es esto?", icon: HelpCircle,      negocioOnly: false, ssoHidden: false },
 ];
 
-const FEATURES_PRODUCTOR = [
-  { icon: Map,            label: "Mapa de potreros" },
-  { icon: PawPrint,       label: "Registro de animales" },
-  { icon: ArrowRightLeft, label: "Movimientos de ganado" },
-];
-
-const FEATURES_NEGOCIO = [
-  { icon: Users,    label: "Clientes" },
-  { icon: Truck,    label: "Proveedores" },
-  { icon: BarChart2,label: "Dashboard de negocio" },
-];
-
-const FEATURES_SIEMPRE = [
-  { icon: ClipboardList, label: "Registros financieros" },
-  { icon: Bot,           label: "Asistente IA" },
-];
-
 export function Sidebar() {
   const { user, logout } = useAuthStore();
-
-  const features = [
-    ...(user?.es_productor ? FEATURES_PRODUCTOR : []),
-    ...(user?.es_negocio   ? FEATURES_NEGOCIO   : []),
-    ...FEATURES_SIEMPRE,
-  ];
 
   const navItems = BASE_NAV.filter(
     (item) =>
@@ -94,21 +68,6 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      {/* Features card */}
-      <div className="mx-3 mb-3 border-t border-agro-accent/20 pt-3">
-        <p className="px-1 mb-2 text-[10px] font-semibold text-agro-muted uppercase tracking-wider">
-          ¿Qué es 360 Finance?
-        </p>
-        <ul className="space-y-1">
-          {features.map(({ icon: Icon, label }) => (
-            <li key={label} className="flex items-center gap-2 px-1 py-0.5">
-              <Icon className="h-3 w-3 shrink-0 text-agro-primary" />
-              <span className="text-xs text-agro-muted">{label}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
 
       {/* User footer */}
       <div className="border-t border-agro-accent/20 px-4 py-4">
