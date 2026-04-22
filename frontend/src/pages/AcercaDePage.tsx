@@ -1,3 +1,4 @@
+import { type ElementType } from "react";
 import {
   Map, PawPrint, ArrowRightLeft, Bot,
   Users, Truck, BarChart2, Package,
@@ -7,7 +8,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 
 interface CardProps {
-  icon: React.ElementType;
+  icon: ElementType;
   title: string;
   description: string;
 }
