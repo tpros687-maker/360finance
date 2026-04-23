@@ -493,7 +493,7 @@ export default function MapaPage() {
   }, [puntos, deletePuntoMutation]);
 
   return (
-    <div className="relative w-full overflow-hidden" style={{ height: "100vh" }}>
+    <div className="page-fade relative w-full overflow-hidden" style={{ height: "100vh" }}>
       {/* Map container */}
       <div ref={mapContainer} className="w-full h-full" />
 

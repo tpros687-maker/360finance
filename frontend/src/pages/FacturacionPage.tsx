@@ -87,7 +87,7 @@ export default function FacturacionPage() {
   const showSuscribir = plan === "trial" || plan === "vencido";
 
   return (
-    <div className="flex h-full flex-col bg-agro-bg overflow-y-auto">
+    <div className="page-fade flex h-full flex-col bg-agro-bg overflow-y-auto">
       {/* Header */}
       <div className="bg-white border-b border-agro-accent/20 px-6 py-8">
         <div className="mx-auto max-w-3xl">

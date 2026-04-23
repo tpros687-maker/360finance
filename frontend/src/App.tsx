@@ -5,6 +5,7 @@ import { lazy, Suspense } from "react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Toaster } from "@/components/Toaster";
+import { PageLoader } from "@/components/PageLoader";
 import { useAuthStore } from "@/store/authStore";
 
 function OptionalLayout() {
@@ -39,7 +40,7 @@ const queryClient = new QueryClient({
 
 function AppRoutes() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-agro-bg" />}>
+    <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />

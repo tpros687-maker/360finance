@@ -555,7 +555,7 @@ export default function ProveedoresPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="page-fade p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-agro-text">Proveedores</h1>

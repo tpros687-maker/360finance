@@ -87,7 +87,7 @@ export default function AsistentePage() {
     historial.length <= 1 && !isLoading;
 
   return (
-    <div className="flex h-full flex-col bg-agro-bg">
+    <div className="page-fade flex h-full flex-col bg-agro-bg">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-agro-accent/20 bg-white px-6 py-4">
         <div className="flex items-center gap-3">

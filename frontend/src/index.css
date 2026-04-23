@@ -13,3 +13,11 @@
   ::-webkit-scrollbar-track { @apply bg-agro-bg; }
   ::-webkit-scrollbar-thumb { @apply bg-agro-accent rounded-full; }
 }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-fade {
+  animation: fadeIn 0.2s ease-out;
+}

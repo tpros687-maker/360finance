@@ -61,7 +61,7 @@ export default function RegistrosPage() {
   }
 
   return (
-    <div className="flex flex-col h-full p-6 gap-4">
+    <div className="page-fade flex flex-col h-full p-6 gap-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
