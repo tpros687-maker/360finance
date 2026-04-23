@@ -14,7 +14,7 @@ geoalchemy2==0.15.2
 shapely==2.0.6
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
-google-genai==1.10.0
+groq>=0.9.0
 email-validator==2.2.0
 openpyxl==3.1.5
 reportlab==4.2.5

@@ -1,10 +1,9 @@
-"""Servicio de Asistente IA usando Google Gemini 2.0 Flash."""
+"""Servicio de Asistente IA usando Groq (llama-3.3-70b-versatile)."""
 from datetime import date, timedelta
 from decimal import Decimal
 
 from geoalchemy2 import Geography
-from google import genai
-from google.genai import types
+from groq import Groq
 from sqlalchemy import cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -26,8 +25,8 @@ SYSTEM_PROMPT = (
 )
 
 
-def _get_client() -> genai.Client:
-    return genai.Client(api_key=settings.GEMINI_API_KEY)
+def _get_client() -> Groq:
+    return Groq(api_key=settings.GROQ_API_KEY)
 
 
 async def construir_contexto(user: User, db: AsyncSession) -> str:
@@ -179,47 +178,25 @@ async def chat(
     historial: list[MensajeChat],
     contexto: str,
 ) -> str:
-    """Llama a Gemini con el historial y contexto del productor. Retorna la respuesta."""
     client = _get_client()
 
-    # Construir contents con contexto inyectado al inicio
-    contents: list[types.Content] = []
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Primer mensaje del sistema: contexto del productor como primer turno de usuario
     if not historial:
-        contents.append(
-            types.Content(
-                role="user",
-                parts=[types.Part(text=f"[CONTEXTO DEL PRODUCTOR]\n{contexto}")],
-            )
-        )
-        contents.append(
-            types.Content(
-                role="model",
-                parts=[types.Part(text="Entendido. Tengo acceso a tus datos y estoy listo para ayudarte.")],
-            )
-        )
+        messages.append({"role": "user", "content": f"[CONTEXTO DEL PRODUCTOR]\n{contexto}"})
+        messages.append({"role": "assistant", "content": "Entendido. Tengo acceso a tus datos y estoy listo para ayudarte."})
     else:
-        # Reconstituir historial previo (que ya incluye el contexto inicial)
         for msg in historial:
-            role = "user" if msg.role == "user" else "model"
-            contents.append(
-                types.Content(role=role, parts=[types.Part(text=msg.content)])
-            )
+            role = "user" if msg.role == "user" else "assistant"
+            messages.append({"role": role, "content": msg.content})
 
-    # Agregar mensaje actual
-    contents.append(
-        types.Content(role="user", parts=[types.Part(text=mensaje)])
+    messages.append({"role": "user", "content": mensaje})
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        max_tokens=2048,
+        temperature=0.7,
     )
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            max_output_tokens=2048,
-            temperature=0.7,
-        ),
-    )
-
-    return response.text or "Lo siento, no pude generar una respuesta. Intentá de nuevo."
+    return response.choices[0].message.content or "Lo siento, no pude generar una respuesta."
