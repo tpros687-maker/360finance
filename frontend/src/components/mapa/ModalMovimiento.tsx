@@ -30,9 +30,12 @@ export function ModalMovimiento() {
   } = useMapaStore();
   const qc = useQueryClient();
 
+  const origenPotrero = potreros.find((p) => p.id === selectedPotreroId);
+  const animalesOrigen = origenPotrero?.animales ?? [];
+
   const { register, handleSubmit, watch, reset } = useForm<FormData>({
     defaultValues: {
-      especie: "bovino",
+      especie: (origenPotrero?.animales?.[0]?.especie ?? "bovino") as EspecieAnimal,
       cantidad: 1,
       ejecutar_ahora: false,
       fecha_programada: today(),
@@ -61,6 +64,9 @@ export function ModalMovimiento() {
     },
     onSuccess: () => {
       toast({ title: "Movimiento registrado" });
+      qc.invalidateQueries({ queryKey: ["movimientos"] });
+      qc.invalidateQueries({ queryKey: ["potreros"] });
+      qc.invalidateQueries({ queryKey: ["animales"] });
       reset();
       setModalMovimientoOpen(false);
     },
@@ -108,11 +114,22 @@ export function ModalMovimiento() {
                 {...register("especie")}
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-md px-3 py-2"
               >
-                <option value="bovino">Bovino</option>
-                <option value="ovino">Ovino</option>
-                <option value="equino">Equino</option>
-                <option value="porcino">Porcino</option>
-                <option value="otro">Otro</option>
+                {animalesOrigen.length > 0
+                  ? animalesOrigen.map((a) => (
+                      <option key={a.especie} value={a.especie}>
+                        {a.especie} ({a.cantidad})
+                      </option>
+                    ))
+                  : (
+                    <>
+                      <option value="bovino">Bovino</option>
+                      <option value="ovino">Ovino</option>
+                      <option value="equino">Equino</option>
+                      <option value="porcino">Porcino</option>
+                      <option value="otro">Otro</option>
+                    </>
+                  )
+                }
               </select>
             </div>
             <div>
