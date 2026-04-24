@@ -30,12 +30,9 @@ export function ModalMovimiento() {
   } = useMapaStore();
   const qc = useQueryClient();
 
-  const origenPotrero = potreros.find((p) => p.id === selectedPotreroId);
-  const animalesOrigen = origenPotrero?.animales ?? [];
-
   const { register, handleSubmit, watch, reset } = useForm<FormData>({
     defaultValues: {
-      especie: (animalesOrigen[0]?.especie ?? "Terneros") as EspecieAnimal,
+      especie: "" as EspecieAnimal,
       cantidad: 1,
       ejecutar_ahora: false,
       fecha_programada: today(),
@@ -114,26 +111,16 @@ export function ModalMovimiento() {
                 {...register("especie")}
                 className="mt-1 w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-md px-3 py-2"
               >
-                {animalesOrigen.length > 0
-                  ? animalesOrigen.map((a) => (
-                      <option key={a.especie} value={a.especie}>
-                        {a.especie} ({a.cantidad} cab.)
-                      </option>
-                    ))
-                  : (
-                    <>
-                      <option value="Terneros">Terneros</option>
-                      <option value="Terneras">Terneras</option>
-                      <option value="Novillos">Novillos</option>
-                      <option value="Vaquillonas">Vaquillonas</option>
-                      <option value="Vacas">Vacas</option>
-                      <option value="Toros">Toros</option>
-                      <option value="Ovinos">Ovinos</option>
-                      <option value="Equinos">Equinos</option>
-                      <option value="Porcinos">Porcinos</option>
-                    </>
-                  )
-                }
+                <option value="">Seleccionar...</option>
+                <option value="Terneros">Terneros</option>
+                <option value="Terneras">Terneras</option>
+                <option value="Novillos">Novillos</option>
+                <option value="Vaquillonas">Vaquillonas</option>
+                <option value="Vacas">Vacas</option>
+                <option value="Toros">Toros</option>
+                <option value="Ovinos">Ovinos</option>
+                <option value="Equinos">Equinos</option>
+                <option value="Porcinos">Porcinos</option>
               </select>
             </div>
             <div>
