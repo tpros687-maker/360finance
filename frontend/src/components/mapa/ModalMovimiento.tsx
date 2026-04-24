@@ -35,7 +35,7 @@ export function ModalMovimiento() {
 
   const { register, handleSubmit, watch, reset } = useForm<FormData>({
     defaultValues: {
-      especie: (origenPotrero?.animales?.[0]?.especie ?? "bovino") as EspecieAnimal,
+      especie: (animalesOrigen[0]?.especie ?? "Terneros") as EspecieAnimal,
       cantidad: 1,
       ejecutar_ahora: false,
       fecha_programada: today(),
@@ -117,16 +117,20 @@ export function ModalMovimiento() {
                 {animalesOrigen.length > 0
                   ? animalesOrigen.map((a) => (
                       <option key={a.especie} value={a.especie}>
-                        {a.especie} ({a.cantidad})
+                        {a.especie} ({a.cantidad} cab.)
                       </option>
                     ))
                   : (
                     <>
-                      <option value="bovino">Bovino</option>
-                      <option value="ovino">Ovino</option>
-                      <option value="equino">Equino</option>
-                      <option value="porcino">Porcino</option>
-                      <option value="otro">Otro</option>
+                      <option value="Terneros">Terneros</option>
+                      <option value="Terneras">Terneras</option>
+                      <option value="Novillos">Novillos</option>
+                      <option value="Vaquillonas">Vaquillonas</option>
+                      <option value="Vacas">Vacas</option>
+                      <option value="Toros">Toros</option>
+                      <option value="Ovinos">Ovinos</option>
+                      <option value="Equinos">Equinos</option>
+                      <option value="Porcinos">Porcinos</option>
                     </>
                   )
                 }
