@@ -149,10 +149,7 @@ class MovimientoGanado(Base):
         Integer, ForeignKey("potreros.id", ondelete="CASCADE"), nullable=False, index=True
     )
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
-    especie: Mapped[str] = mapped_column(
-        SAEnum("bovino", "ovino", "equino", "porcino", "otro", name="especieanimal"),
-        nullable=False,
-    )
+    especie: Mapped[str] = mapped_column(String(100), nullable=False)
     fecha_programada: Mapped[date] = mapped_column(Date, nullable=False)
     fecha_ejecutada: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     estado: Mapped[str] = mapped_column(

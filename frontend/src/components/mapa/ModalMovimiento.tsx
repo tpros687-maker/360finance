@@ -1,38 +1,17 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMapaStore } from "@/store/mapaStore";
 import { createMovimiento } from "@/lib/movimientosApi";
+import { getAnimales } from "@/lib/animalesApi";
 import type { MovimientoCreate } from "@/types/mapa";
 import { toast } from "@/hooks/useToast";
 
 const today = () => new Date().toISOString().split("T")[0];
-
-const ESPECIE_ENUM: Record<string, string> = {
-  bovino: "bovino", bovinos: "bovino",
-  ternero: "bovino", terneros: "bovino",
-  ternera: "bovino", terneras: "bovino",
-  novillo: "bovino", novillos: "bovino",
-  vaquillona: "bovino", vaquillonas: "bovino",
-  vaca: "bovino", vacas: "bovino",
-  toro: "bovino", toros: "bovino",
-  ovino: "ovino", ovinos: "ovino",
-  oveja: "ovino", ovejas: "ovino",
-  equino: "equino", equinos: "equino",
-  caballo: "equino", caballos: "equino",
-  yegua: "equino", yeguas: "equino",
-  porcino: "porcino", porcinos: "porcino",
-  cerdo: "porcino", cerdos: "porcino",
-  chancho: "porcino", chanchos: "porcino",
-};
-
-function toEspecieEnum(especie: string): string {
-  return ESPECIE_ENUM[especie.toLowerCase().trim()] ?? "otro";
-}
 
 interface BaseForm {
   potrero_destino_id: number;
@@ -55,18 +34,33 @@ export function ModalMovimiento() {
     selectedPotreroId,
     potreros,
     animalesByPotrero,
+    setAnimalesForPotrero,
     addMovimiento,
   } = useMapaStore();
   const qc = useQueryClient();
 
-  const animalesOrigen: FilaAnimal[] = selectedPotreroId
-    ? (animalesByPotrero[selectedPotreroId] ?? []).map((a) => ({
-        especie: a.especie,
-        cantidadMax: a.cantidad,
-        cantidad: a.cantidad,
-        checked: true,
-      }))
-    : [];
+  // Fetch fresh animals for the origin potrero when modal is open
+  const { data: animalesData } = useQuery({
+    queryKey: ["animales", selectedPotreroId],
+    queryFn: async () => {
+      if (!selectedPotreroId) return [];
+      const data = await getAnimales(selectedPotreroId);
+      setAnimalesForPotrero(selectedPotreroId, data);
+      return data;
+    },
+    enabled: !!selectedPotreroId && modalMovimientoOpen,
+    staleTime: 0,
+  });
+
+  // Prefer fresh query result; fall back to store
+  const animalesOrigen: FilaAnimal[] = (
+    animalesData ?? (selectedPotreroId ? (animalesByPotrero[selectedPotreroId] ?? []) : [])
+  ).map((a) => ({
+    especie: a.especie,
+    cantidadMax: a.cantidad,
+    cantidad: a.cantidad,
+    checked: true,
+  }));
 
   const [filas, setFilas] = useState<FilaAnimal[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -82,7 +76,7 @@ export function ModalMovimiento() {
 
   const ejecutarAhora = watch("ejecutar_ahora");
 
-  // Sync filas when modal opens
+  // Sync filas when modal opens or fresh animal data arrives
   if (modalMovimientoOpen && filas.length === 0 && animalesOrigen.length > 0) {
     setFilas(animalesOrigen);
   }
@@ -97,7 +91,7 @@ export function ModalMovimiento() {
         const payload: MovimientoCreate = {
           potrero_origen_id: selectedPotreroId,
           potrero_destino_id: Number(base.potrero_destino_id),
-          especie: toEspecieEnum(fila.especie),
+          especie: fila.especie,
           cantidad: fila.cantidad,
           fecha_programada: base.ejecutar_ahora ? today() : base.fecha_programada,
           ejecutar_ahora: base.ejecutar_ahora,
@@ -114,9 +108,13 @@ export function ModalMovimiento() {
       qc.invalidateQueries({ queryKey: ["animales"] });
       reset();
       setFilas([]);
+      setSubmitting(false);
       setModalMovimientoOpen(false);
     },
-    onError: (e: Error) => toast({ title: e.message || "Error al registrar movimiento", variant: "destructive" }),
+    onError: (e: Error) => {
+      setSubmitting(false);
+      toast({ title: e.message || "Error al registrar movimiento", variant: "destructive" });
+    },
   });
 
   function cerrar() {
@@ -194,7 +192,7 @@ export function ModalMovimiento() {
                       onChange={() => toggleFila(i)}
                       className="accent-emerald-500"
                     />
-                    <span className="text-white text-sm">{fila.especie}</span>
+                    <span className="text-white text-sm capitalize">{fila.especie}</span>
                     <div className="flex items-center gap-1">
                       <input
                         type="number"
