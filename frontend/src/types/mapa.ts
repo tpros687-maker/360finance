@@ -36,6 +36,9 @@ export interface Potrero {
   observaciones: string | null;
   en_descanso: boolean;
   fecha_descanso: string | null;
+  cultivo?: string | null;
+  es_primera?: boolean | null;
+  fecha_siembra?: string | null;
   created_at: string;
 }
 
@@ -51,6 +54,9 @@ export interface PotreroCreate {
   cantidad_franjas?: number;
   franjas_usadas?: number;
   observaciones?: string;
+  cultivo?: string | null;
+  es_primera?: boolean | null;
+  fecha_siembra?: string | null;
 }
 
 export interface PotreroUpdate {
@@ -65,6 +71,29 @@ export interface PotreroUpdate {
   cantidad_franjas?: number | null;
   franjas_usadas?: number | null;
   observaciones?: string | null;
+  cultivo?: string | null;
+  es_primera?: boolean | null;
+  fecha_siembra?: string | null;
+}
+
+export interface AplicacionPotrero {
+  id: number;
+  potrero_id: number;
+  producto: string;
+  fecha_aplicacion: string;
+  costo: number | null;
+  moneda: string;
+  observaciones: string | null;
+  registro_id: number | null;
+  created_at: string;
+}
+
+export interface AplicacionCreate {
+  producto: string;
+  fecha_aplicacion: string;
+  costo?: number | null;
+  moneda?: string;
+  observaciones?: string;
 }
 
 // ── Animal ────────────────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ from app.models.categoria import TipoMovimiento
 from app.models.mapa import Animal, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
-from app.schemas.mapa import MovimientoRead, PotreroCreate, PotreroRead, PotreroUpdate, RentabilidadPotrero
+from app.schemas.mapa import AplicacionRead, MovimientoRead, PotreroCreate, PotreroRead, PotreroUpdate, RentabilidadPotrero
 
 router = APIRouter(prefix="/potreros", tags=["potreros"])
 
@@ -46,6 +46,9 @@ def _potrero_to_read(p: Potrero) -> PotreroRead:
         observaciones=p.observaciones,
         en_descanso=p.en_descanso,
         fecha_descanso=p.fecha_descanso,
+        cultivo=p.cultivo,
+        es_primera=p.es_primera,
+        fecha_siembra=p.fecha_siembra,
         created_at=p.created_at,
     )
 
@@ -205,6 +208,12 @@ async def update_potrero(
         potrero.franjas_usadas = payload.franjas_usadas
     if payload.observaciones is not None:
         potrero.observaciones = payload.observaciones
+    if payload.cultivo is not None:
+        potrero.cultivo = payload.cultivo
+    if payload.es_primera is not None:
+        potrero.es_primera = payload.es_primera
+    if payload.fecha_siembra is not None:
+        potrero.fecha_siembra = payload.fecha_siembra
 
     await db.commit()
     await db.refresh(potrero)

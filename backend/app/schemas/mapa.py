@@ -28,6 +28,9 @@ class PotreroCreate(BaseModel):
     cantidad_franjas: Optional[int] = None
     franjas_usadas: Optional[int] = None
     observaciones: Optional[str] = None
+    cultivo: Optional[str] = None
+    es_primera: Optional[bool] = None
+    fecha_siembra: Optional[date] = None
 
 
 class PotreroUpdate(BaseModel):
@@ -42,6 +45,9 @@ class PotreroUpdate(BaseModel):
     cantidad_franjas: Optional[int] = None
     franjas_usadas: Optional[int] = None
     observaciones: Optional[str] = None
+    cultivo: Optional[str] = None
+    es_primera: Optional[bool] = None
+    fecha_siembra: Optional[date] = None
 
 
 class PotreroRead(BaseModel):
@@ -60,6 +66,9 @@ class PotreroRead(BaseModel):
     observaciones: Optional[str]
     en_descanso: bool
     fecha_descanso: Optional[date]
+    cultivo: Optional[str] = None
+    es_primera: Optional[bool] = None
+    fecha_siembra: Optional[date] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -137,6 +146,30 @@ class MovimientoRead(BaseModel):
     fecha_ejecutada: Optional[date]
     estado: str
     notas: Optional[str]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── AplicacionPotrero ─────────────────────────────────────────────────────────
+
+class AplicacionCreate(BaseModel):
+    producto: str
+    fecha_aplicacion: date
+    costo: Optional[Decimal] = None
+    moneda: str = "UYU"
+    observaciones: Optional[str] = None
+
+
+class AplicacionRead(BaseModel):
+    id: int
+    potrero_id: int
+    producto: str
+    fecha_aplicacion: date
+    costo: Optional[Decimal]
+    moneda: str
+    observaciones: Optional[str]
+    registro_id: Optional[int]
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

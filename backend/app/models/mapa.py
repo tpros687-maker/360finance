@@ -79,6 +79,9 @@ class Potrero(Base):
     hectareas: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     en_descanso: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fecha_descanso: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    cultivo: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    es_primera: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    fecha_siembra: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -88,6 +91,9 @@ class Potrero(Base):
     )
     puntos_interes: Mapped[list["PuntoInteres"]] = relationship(
         "PuntoInteres", back_populates="potrero", lazy="select"
+    )
+    aplicaciones: Mapped[list["AplicacionPotrero"]] = relationship(
+        "AplicacionPotrero", back_populates="potrero", cascade="all, delete-orphan", lazy="select"
     )
 
 
@@ -168,3 +174,28 @@ class MovimientoGanado(Base):
     potrero_destino: Mapped["Potrero"] = relationship(
         "Potrero", foreign_keys=[potrero_destino_id]
     )
+
+
+class AplicacionPotrero(Base):
+    __tablename__ = "aplicaciones_potrero"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    potrero_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("potreros.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    producto: Mapped[str] = mapped_column(String(200), nullable=False)
+    fecha_aplicacion: Mapped[date] = mapped_column(Date, nullable=False)
+    costo: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    moneda: Mapped[str] = mapped_column(String(3), nullable=False, server_default="UYU")
+    observaciones: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    registro_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("registros.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    potrero: Mapped["Potrero"] = relationship("Potrero", back_populates="aplicaciones")
