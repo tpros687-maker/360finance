@@ -140,3 +140,16 @@ class MovimientoRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ── Rentabilidad ──────────────────────────────────────────────────────────────
+
+class RentabilidadPotrero(BaseModel):
+    potrero_id: int
+    nombre: str
+    hectareas: Optional[Decimal]
+    total_ingresos: Decimal
+    total_gastos: Decimal
+    balance: Decimal
+    rentabilidad_pct: Optional[Decimal]
+    cantidad_animales: int

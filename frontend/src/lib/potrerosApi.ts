@@ -1,6 +1,7 @@
 import { api } from "./axios";
 import type { Potrero, PotreroCreate, PotreroUpdate } from "@/types/mapa";
 import type { MovimientoGanado } from "@/types/mapa";
+import type { RentabilidadPotrero } from "@/types/potreros";
 
 export async function getPotreros(): Promise<Potrero[]> {
   const res = await api.get<Potrero[]>("/potreros");
@@ -23,5 +24,13 @@ export async function deletePotrero(id: number): Promise<void> {
 
 export async function getMovimientosByPotrero(potreroId: number): Promise<MovimientoGanado[]> {
   const res = await api.get<MovimientoGanado[]>(`/potreros/${potreroId}/movimientos`);
+  return res.data;
+}
+
+export async function getRentabilidadPotreros(params?: {
+  fecha_desde?: string;
+  fecha_hasta?: string;
+}): Promise<RentabilidadPotrero[]> {
+  const res = await api.get<RentabilidadPotrero[]>("/potreros/rentabilidad", { params });
   return res.data;
 }

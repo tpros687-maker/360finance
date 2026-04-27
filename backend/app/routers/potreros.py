@@ -1,17 +1,20 @@
 from datetime import date
-from typing import Any
+from decimal import Decimal
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import mapping, shape as shapely_shape
-from sqlalchemy import or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models.mapa import MovimientoGanado, Potrero
+from app.models.categoria import TipoMovimiento
+from app.models.mapa import Animal, MovimientoGanado, Potrero
+from app.models.registro import Registro
 from app.models.user import User
-from app.schemas.mapa import MovimientoRead, PotreroCreate, PotreroRead, PotreroUpdate
+from app.schemas.mapa import MovimientoRead, PotreroCreate, PotreroRead, PotreroUpdate, RentabilidadPotrero
 
 router = APIRouter(prefix="/potreros", tags=["potreros"])
 
@@ -93,6 +96,82 @@ async def create_potrero(
     await db.commit()
     await db.refresh(potrero)
     return _potrero_to_read(potrero)
+
+
+@router.get("/rentabilidad", response_model=list[RentabilidadPotrero])
+async def get_rentabilidad(
+    fecha_desde: Optional[date] = None,
+    fecha_hasta: Optional[date] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[RentabilidadPotrero]:
+    """Rentabilidad por potrero: ingresos, gastos, balance y % en una sola query."""
+    animals_sq = (
+        select(
+            Animal.potrero_id,
+            func.sum(Animal.cantidad).label("total_animales"),
+        )
+        .where(Animal.user_id == current_user.id)
+        .group_by(Animal.potrero_id)
+        .subquery()
+    )
+
+    reg_join: list = [
+        Registro.potrero_id == Potrero.id,
+        Registro.user_id == current_user.id,
+    ]
+    if fecha_desde:
+        reg_join.append(Registro.fecha >= fecha_desde)
+    if fecha_hasta:
+        reg_join.append(Registro.fecha <= fecha_hasta)
+
+    ingresos_col = func.coalesce(
+        func.sum(case((Registro.tipo == TipoMovimiento.ingreso, Registro.monto), else_=Decimal("0"))),
+        Decimal("0"),
+    )
+    gastos_col = func.coalesce(
+        func.sum(case((Registro.tipo == TipoMovimiento.gasto, Registro.monto), else_=Decimal("0"))),
+        Decimal("0"),
+    )
+
+    stmt = (
+        select(
+            Potrero.id.label("potrero_id"),
+            Potrero.nombre,
+            Potrero.hectareas,
+            ingresos_col.label("total_ingresos"),
+            gastos_col.label("total_gastos"),
+            func.coalesce(animals_sq.c.total_animales, 0).label("cantidad_animales"),
+        )
+        .outerjoin(Registro, and_(*reg_join))
+        .outerjoin(animals_sq, animals_sq.c.potrero_id == Potrero.id)
+        .where(Potrero.user_id == current_user.id)
+        .group_by(Potrero.id, Potrero.nombre, Potrero.hectareas, animals_sq.c.total_animales)
+        .order_by((ingresos_col - gastos_col).desc())
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    out: list[RentabilidadPotrero] = []
+    for row in rows:
+        ingresos = Decimal(str(row.total_ingresos))
+        gastos = Decimal(str(row.total_gastos))
+        balance = ingresos - gastos
+        rent_pct = (balance / gastos * 100).quantize(Decimal("0.01")) if gastos > 0 else None
+        out.append(
+            RentabilidadPotrero(
+                potrero_id=row.potrero_id,
+                nombre=row.nombre,
+                hectareas=row.hectareas,
+                total_ingresos=ingresos,
+                total_gastos=gastos,
+                balance=balance,
+                rentabilidad_pct=rent_pct,
+                cantidad_animales=int(row.cantidad_animales),
+            )
+        )
+    return out
 
 
 @router.put("/{potrero_id}", response_model=PotreroRead)
