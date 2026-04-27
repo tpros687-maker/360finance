@@ -12,6 +12,28 @@ import { toast } from "@/hooks/useToast";
 
 const today = () => new Date().toISOString().split("T")[0];
 
+const ESPECIE_ENUM: Record<string, string> = {
+  bovino: "bovino", bovinos: "bovino",
+  ternero: "bovino", terneros: "bovino",
+  ternera: "bovino", terneras: "bovino",
+  novillo: "bovino", novillos: "bovino",
+  vaquillona: "bovino", vaquillonas: "bovino",
+  vaca: "bovino", vacas: "bovino",
+  toro: "bovino", toros: "bovino",
+  ovino: "ovino", ovinos: "ovino",
+  oveja: "ovino", ovejas: "ovino",
+  equino: "equino", equinos: "equino",
+  caballo: "equino", caballos: "equino",
+  yegua: "equino", yeguas: "equino",
+  porcino: "porcino", porcinos: "porcino",
+  cerdo: "porcino", cerdos: "porcino",
+  chancho: "porcino", chanchos: "porcino",
+};
+
+function toEspecieEnum(especie: string): string {
+  return ESPECIE_ENUM[especie.toLowerCase().trim()] ?? "otro";
+}
+
 interface BaseForm {
   potrero_destino_id: number;
   ejecutar_ahora: boolean;
@@ -75,7 +97,7 @@ export function ModalMovimiento() {
         const payload: MovimientoCreate = {
           potrero_origen_id: selectedPotreroId,
           potrero_destino_id: Number(base.potrero_destino_id),
-          especie: fila.especie,
+          especie: toEspecieEnum(fila.especie),
           cantidad: fila.cantidad,
           fecha_programada: base.ejecutar_ahora ? today() : base.fecha_programada,
           ejecutar_ahora: base.ejecutar_ahora,

@@ -400,15 +400,11 @@ export function PanelLateral() {
                   className="bg-transparent text-agro-text text-xs outline-none w-full"
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="Terneros">Terneros</option>
-                  <option value="Terneras">Terneras</option>
-                  <option value="Novillos">Novillos</option>
-                  <option value="Vaquillonas">Vaquillonas</option>
-                  <option value="Vacas">Vacas</option>
-                  <option value="Toros">Toros</option>
-                  <option value="Ovinos">Ovinos</option>
-                  <option value="Equinos">Equinos</option>
-                  <option value="Porcinos">Porcinos</option>
+                  <option value="bovino">Bovinos</option>
+                  <option value="ovino">Ovinos</option>
+                  <option value="equino">Equinos</option>
+                  <option value="porcino">Porcinos</option>
+                  <option value="otro">Otros</option>
                 </select>
                 <input
                   type="number"
