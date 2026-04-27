@@ -7,30 +7,17 @@ Create Date: 2026-04-27 12:00:00.000000
 """
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
 
-revision: str = '0011_alter_movimientos_especie_to_varchar'
+revision: str = '0011_esp_fix'
 down_revision: Union[str, None] = 'a1b2c3d4e5f6'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.alter_column(
-        'movimientos_ganado',
-        'especie',
-        type_=sa.String(length=100),
-        existing_type=sa.String(length=32),
-        postgresql_using='especie::varchar(100)',
-    )
+    op.execute("ALTER TABLE movimientos_ganado ALTER COLUMN especie TYPE VARCHAR(100)")
 
 
 def downgrade() -> None:
-    op.alter_column(
-        'movimientos_ganado',
-        'especie',
-        type_=sa.String(length=32),
-        existing_type=sa.String(length=100),
-        postgresql_using='especie::varchar(32)',
-    )
+    op.execute("ALTER TABLE movimientos_ganado ALTER COLUMN especie TYPE VARCHAR(32)")
