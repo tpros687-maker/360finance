@@ -29,6 +29,7 @@ const ProductosPage = lazy(() => import("@/pages/ProductosPage"));
 const PagoPage = lazy(() => import("@/pages/PagoPage"));
 const FacturacionPage = lazy(() => import("@/pages/FacturacionPage"));
 const RentabilidadPage = lazy(() => import("@/pages/RentabilidadPage"));
+const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,7 @@ function AppRoutes() {
             <Route path="/productos" element={<ProductosPage />} />
             <Route path="/facturacion" element={<FacturacionPage />} />
             <Route path="/rentabilidad" element={<RentabilidadPage />} />
+            <Route path="/flujo-caja" element={<FlujoCajaPage />} />
           </Route>
         </Route>
 

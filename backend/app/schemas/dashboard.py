@@ -1,5 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -19,6 +20,42 @@ class MovimientoProximo(BaseModel):
     especie: str
     fecha_programada: date
 
+
+# ── Flujo de Caja ─────────────────────────────────────────────────────────────
+
+class ItemFlujo(BaseModel):
+    id: int
+    tipo: str  # "cobro" | "pago"
+    descripcion: Optional[str]
+    contraparte: str
+    monto: float
+    moneda: str
+    fecha_vencimiento: Optional[datetime]
+    dias_restantes: Optional[int]
+    vencido: bool
+
+
+class SemanaFlujo(BaseModel):
+    semana_label: str
+    cobros: float
+    pagos: float
+    balance_semana: float
+    balance_acumulado: float
+
+
+class FlujoCajaResponse(BaseModel):
+    total_por_cobrar: float
+    total_por_pagar: float
+    balance_proyectado: float
+    alerta_liquidez: bool
+    semanas: list[SemanaFlujo]
+    cobros_pendientes: list[ItemFlujo]
+    pagos_pendientes: list[ItemFlujo]
+    cobros_vencidos: list[ItemFlujo]
+    pagos_vencidos: list[ItemFlujo]
+
+
+# ── Dashboard principal ────────────────────────────────────────────────────────
 
 class DashboardResumen(BaseModel):
     # Financiero

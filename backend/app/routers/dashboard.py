@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -10,13 +10,17 @@ from sqlalchemy.orm import aliased
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.categoria import Categoria, TipoMovimiento
+from app.models.cliente import Cliente, CuentaCobrar, CuentaPagar, Proveedor
 from app.models.mapa import Animal, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
 from app.schemas.dashboard import (
     AnimalEspecie,
     DashboardResumen,
+    FlujoCajaResponse,
+    ItemFlujo,
     MovimientoProximo,
+    SemanaFlujo,
 )
 from app.schemas.registro import ResumenCategoria, ResumenMes
 
@@ -186,4 +190,125 @@ async def get_dashboard_resumen(
         hectareas_totales=hectareas_totales,
         animales_por_especie=animales_por_especie,
         movimientos_proximos=movimientos_proximos,
+    )
+
+
+_MESES_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+@router.get("/flujo-caja", response_model=FlujoCajaResponse)
+async def get_flujo_caja(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FlujoCajaResponse:
+    """Flujo de caja proyectado: cobros/pagos pendientes agrupados por semana."""
+    uid = current_user.id
+    today = date.today()
+
+    # ── Cuentas por cobrar ────────────────────────────────────────────────────
+    cobros_q = await db.execute(
+        select(CuentaCobrar, Cliente.nombre.label("cliente_nombre"))
+        .join(Cliente, CuentaCobrar.cliente_id == Cliente.id)
+        .where(CuentaCobrar.user_id == uid, CuentaCobrar.pagado == False)  # noqa: E712
+        .order_by(CuentaCobrar.fecha_vencimiento.asc().nulls_last())
+    )
+    cobros_rows = cobros_q.all()
+
+    # ── Cuentas por pagar ─────────────────────────────────────────────────────
+    pagos_q = await db.execute(
+        select(CuentaPagar, Proveedor.nombre.label("proveedor_nombre"))
+        .join(Proveedor, CuentaPagar.proveedor_id == Proveedor.id)
+        .where(CuentaPagar.user_id == uid, CuentaPagar.pagado == False)  # noqa: E712
+        .order_by(CuentaPagar.fecha_vencimiento.asc().nulls_last())
+    )
+    pagos_rows = pagos_q.all()
+
+    # ── Construir ItemFlujo ───────────────────────────────────────────────────
+    def _dias(fv: datetime | None) -> int | None:
+        if fv is None:
+            return None
+        return (fv.date() - today).days
+
+    cobros: list[ItemFlujo] = [
+        ItemFlujo(
+            id=c.id,
+            tipo="cobro",
+            descripcion=c.descripcion,
+            contraparte=nombre,
+            monto=float(c.monto),
+            moneda=c.moneda,
+            fecha_vencimiento=c.fecha_vencimiento,
+            dias_restantes=_dias(c.fecha_vencimiento),
+            vencido=(_dias(c.fecha_vencimiento) or 0) < 0 if c.fecha_vencimiento else False,
+        )
+        for c, nombre in cobros_rows
+    ]
+
+    pagos: list[ItemFlujo] = [
+        ItemFlujo(
+            id=p.id,
+            tipo="pago",
+            descripcion=p.descripcion,
+            contraparte=nombre,
+            monto=float(p.monto),
+            moneda=p.moneda,
+            fecha_vencimiento=p.fecha_vencimiento,
+            dias_restantes=_dias(p.fecha_vencimiento),
+            vencido=(_dias(p.fecha_vencimiento) or 0) < 0 if p.fecha_vencimiento else False,
+        )
+        for p, nombre in pagos_rows
+    ]
+
+    # ── Semanas (13 semanas desde hoy) ────────────────────────────────────────
+    semanas: list[SemanaFlujo] = []
+    balance_acum = 0.0
+
+    for w in range(13):
+        sem_inicio = today + timedelta(weeks=w)
+        sem_fin = sem_inicio + timedelta(days=6)
+        label = (
+            f"{sem_inicio.day} {_MESES_ES[sem_inicio.month - 1]} "
+            f"— {sem_fin.day} {_MESES_ES[sem_fin.month - 1]}"
+        )
+
+        cobros_sem = sum(
+            c.monto for c in cobros
+            if c.fecha_vencimiento is not None
+            and sem_inicio <= c.fecha_vencimiento.date() <= sem_fin
+        )
+        pagos_sem = sum(
+            p.monto for p in pagos
+            if p.fecha_vencimiento is not None
+            and sem_inicio <= p.fecha_vencimiento.date() <= sem_fin
+        )
+        balance_sem = cobros_sem - pagos_sem
+        balance_acum += balance_sem
+
+        semanas.append(SemanaFlujo(
+            semana_label=label,
+            cobros=cobros_sem,
+            pagos=pagos_sem,
+            balance_semana=balance_sem,
+            balance_acumulado=balance_acum,
+        ))
+
+    # ── Clasificar ───────────────────────────────────────────────────────────
+    cobros_vencidos = [c for c in cobros if c.vencido]
+    cobros_pendientes = [c for c in cobros if not c.vencido]
+    pagos_vencidos = [p for p in pagos if p.vencido]
+    pagos_pendientes = [p for p in pagos if not p.vencido]
+
+    total_por_cobrar = sum(c.monto for c in cobros)
+    total_por_pagar = sum(p.monto for p in pagos)
+
+    return FlujoCajaResponse(
+        total_por_cobrar=total_por_cobrar,
+        total_por_pagar=total_por_pagar,
+        balance_proyectado=total_por_cobrar - total_por_pagar,
+        alerta_liquidez=any(s.balance_acumulado < 0 for s in semanas),
+        semanas=semanas,
+        cobros_pendientes=cobros_pendientes,
+        pagos_pendientes=pagos_pendientes,
+        cobros_vencidos=cobros_vencidos,
+        pagos_vencidos=pagos_vencidos,
     )

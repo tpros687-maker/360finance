@@ -12,6 +12,7 @@ import {
   Package,
   CreditCard,
   TrendingUp,
+  ArrowLeftRight,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ const BASE_NAV = [
   { to: "/mapa",         label: "Mapa",                 icon: Map,             negocioOnly: false, ssoHidden: false },
   { to: "/registros",    label: "Registros",             icon: ClipboardList,   negocioOnly: false, ssoHidden: false },
   { to: "/rentabilidad", label: "Rentabilidad",          icon: TrendingUp,      negocioOnly: false, ssoHidden: false },
+  { to: "/flujo-caja",  label: "Flujo de Caja",         icon: ArrowLeftRight,  negocioOnly: false, ssoHidden: false },
   { to: "/clientes",     label: "Clientes",              icon: Users,           negocioOnly: false, ssoHidden: false },
   { to: "/proveedores",  label: "Proveedores",           icon: Truck,           negocioOnly: false, ssoHidden: false },
   { to: "/asistente",    label: "Asistente IA",          icon: Bot,             negocioOnly: false, ssoHidden: false },
