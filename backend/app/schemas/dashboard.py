@@ -21,6 +21,15 @@ class MovimientoProximo(BaseModel):
     fecha_programada: date
 
 
+# ── Alertas ───────────────────────────────────────────────────────────────────
+
+class AlertaItem(BaseModel):
+    tipo: str
+    nivel: str  # "danger" | "warning" | "info"
+    titulo: str
+    detalle: str
+
+
 # ── Flujo de Caja ─────────────────────────────────────────────────────────────
 
 class ItemFlujo(BaseModel):

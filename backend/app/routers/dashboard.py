@@ -15,6 +15,7 @@ from app.models.mapa import Animal, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
 from app.schemas.dashboard import (
+    AlertaItem,
     AnimalEspecie,
     DashboardResumen,
     FlujoCajaResponse,
@@ -196,6 +197,14 @@ async def get_dashboard_resumen(
 _MESES_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
 
+def _add_months(d: date, n: int) -> date:
+    """First day of the month n months from d."""
+    month = d.month + n
+    year = d.year + (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    return date(year, month, 1)
+
+
 @router.get("/flujo-caja", response_model=FlujoCajaResponse)
 async def get_flujo_caja(
     current_user: User = Depends(get_current_user),
@@ -312,3 +321,163 @@ async def get_flujo_caja(
         cobros_vencidos=cobros_vencidos,
         pagos_vencidos=pagos_vencidos,
     )
+
+
+_NIVEL_ORDER: dict[str, int] = {"danger": 0, "warning": 1, "info": 2}
+
+
+@router.get("/alertas", response_model=list[AlertaItem])
+async def get_alertas(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[AlertaItem]:
+    """Alertas automáticas del usuario ordenadas por severidad."""
+    uid = current_user.id
+    today = date.today()
+    alertas: list[AlertaItem] = []
+
+    # ── 1. DESCANSO_EXCESIVO ──────────────────────────────────────────────────
+    cutoff_descanso = today - timedelta(days=45)
+    descanso_q = await db.execute(
+        select(Potrero.nombre, Potrero.fecha_descanso).where(
+            Potrero.user_id == uid,
+            Potrero.en_descanso == True,  # noqa: E712
+            Potrero.fecha_descanso.isnot(None),
+            Potrero.fecha_descanso <= cutoff_descanso,
+        )
+    )
+    for nombre, fecha_d in descanso_q.all():
+        dias = (today - fecha_d).days
+        alertas.append(AlertaItem(
+            tipo="DESCANSO_EXCESIVO",
+            nivel="warning",
+            titulo=f"Potrero «{nombre}» lleva {dias} días en descanso",
+            detalle="Considerá rotarlo o registrar su actividad.",
+        ))
+
+    # ── 2. CLIENTE_DEUDA_VENCIDA ──────────────────────────────────────────────
+    deuda_cli_q = await db.execute(
+        select(
+            Cliente.nombre,
+            func.sum(CuentaCobrar.monto).label("total"),
+            func.count(CuentaCobrar.id).label("cnt"),
+        )
+        .join(CuentaCobrar, CuentaCobrar.cliente_id == Cliente.id)
+        .where(
+            CuentaCobrar.user_id == uid,
+            CuentaCobrar.pagado == False,  # noqa: E712
+            CuentaCobrar.fecha_vencimiento < func.current_date(),
+        )
+        .group_by(Cliente.id, Cliente.nombre)
+    )
+    for nombre, total, cnt in deuda_cli_q.all():
+        s = "s" if cnt > 1 else ""
+        alertas.append(AlertaItem(
+            tipo="CLIENTE_DEUDA_VENCIDA",
+            nivel="danger",
+            titulo=f"Deuda vencida de {nombre}",
+            detalle=f"{cnt} cuenta{s} vencida{s} por un total de {float(total):,.0f}.",
+        ))
+
+    # ── 3. PAGO_VENCIDO ───────────────────────────────────────────────────────
+    pagos_v_q = await db.execute(
+        select(
+            Proveedor.nombre,
+            func.sum(CuentaPagar.monto).label("total"),
+            func.count(CuentaPagar.id).label("cnt"),
+        )
+        .join(CuentaPagar, CuentaPagar.proveedor_id == Proveedor.id)
+        .where(
+            CuentaPagar.user_id == uid,
+            CuentaPagar.pagado == False,  # noqa: E712
+            CuentaPagar.fecha_vencimiento < func.current_date(),
+        )
+        .group_by(Proveedor.id, Proveedor.nombre)
+    )
+    for nombre, total, cnt in pagos_v_q.all():
+        s = "s" if cnt > 1 else ""
+        alertas.append(AlertaItem(
+            tipo="PAGO_VENCIDO",
+            nivel="danger",
+            titulo=f"Pago vencido a {nombre}",
+            detalle=f"{cnt} factura{s} vencida{s} por un total de {float(total):,.0f}.",
+        ))
+
+    # ── 4. GASTO_ELEVADO ──────────────────────────────────────────────────────
+    first_this = today.replace(day=1)
+    first_prev3 = _add_months(first_this, -3)
+
+    gasto_mes_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= first_this,
+        )
+    )
+    gasto_mes = float(gasto_mes_q.scalar() or 0)
+
+    gastos_prev_q = await db.execute(
+        select(
+            func.to_char(Registro.fecha, "YYYY-MM").label("mes"),
+            func.sum(Registro.monto).label("total"),
+        )
+        .where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= first_prev3,
+            Registro.fecha < first_this,
+        )
+        .group_by("mes")
+    )
+    prev_rows = gastos_prev_q.all()
+    if prev_rows:
+        avg_prev = sum(float(r.total) for r in prev_rows) / 3
+        if avg_prev > 0 and gasto_mes > avg_prev * 1.30:
+            pct = (gasto_mes / avg_prev - 1) * 100
+            alertas.append(AlertaItem(
+                tipo="GASTO_ELEVADO",
+                nivel="warning",
+                titulo="Gasto mensual elevado",
+                detalle=f"Los gastos de este mes superan en {pct:.0f}% el promedio de los últimos 3 meses.",
+            ))
+
+    # ── 5. POTRERO_SIN_INGRESOS ───────────────────────────────────────────────
+    cutoff_90 = today - timedelta(days=90)
+
+    ingr_ids_q = await db.execute(
+        select(Registro.potrero_id).where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.ingreso,
+            Registro.potrero_id.isnot(None),
+            Registro.fecha >= cutoff_90,
+        ).distinct()
+    )
+    ingr_ids = {row[0] for row in ingr_ids_q.all()}
+
+    anim_ids_q = await db.execute(
+        select(Animal.potrero_id)
+        .where(Animal.user_id == uid)
+        .group_by(Animal.potrero_id)
+        .having(func.sum(Animal.cantidad) > 0)
+    )
+    anim_ids = {row[0] for row in anim_ids_q.all()}
+
+    sin_ingr = anim_ids - ingr_ids
+    if sin_ingr:
+        sin_q = await db.execute(
+            select(Potrero.nombre).where(
+                Potrero.user_id == uid,
+                Potrero.id.in_(sin_ingr),
+            ).order_by(Potrero.nombre)
+        )
+        for (nombre,) in sin_q.all():
+            alertas.append(AlertaItem(
+                tipo="POTRERO_SIN_INGRESOS",
+                nivel="info",
+                titulo=f"Sin ingresos recientes en «{nombre}»",
+                detalle="Este potrero tiene animales pero no registra ingresos en los últimos 90 días.",
+            ))
+
+    # ── Ordenar: danger → warning → info ─────────────────────────────────────
+    alertas.sort(key=lambda a: _NIVEL_ORDER[a.nivel])
+    return alertas
