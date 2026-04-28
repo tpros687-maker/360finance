@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -71,6 +71,15 @@ class FlujoCajaResponse(BaseModel):
     pagos_pendientes: list[ItemFlujo]
     cobros_vencidos: list[ItemFlujo]
     pagos_vencidos: list[ItemFlujo]
+
+
+# ── Score de Salud Financiera ─────────────────────────────────────────────────
+
+class ScoreSaludResponse(BaseModel):
+    score: int          # 0-100
+    nivel: str          # "crítico" | "regular" | "bueno" | "excelente"
+    detalle: dict[str, Any]
+    fecha_calculo: date
 
 
 # ── Dashboard principal ────────────────────────────────────────────────────────

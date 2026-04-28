@@ -23,6 +23,7 @@ from app.schemas.dashboard import (
     ItemFlujo,
     MovimientoProximo,
     RecomendacionIA,
+    ScoreSaludResponse,
     SemanaFlujo,
 )
 from app.services.asistente import _get_client as _groq_client
@@ -532,3 +533,155 @@ async def get_recomendaciones(
         return [RecomendacionIA(**item) for item in data]
     except Exception:
         return []
+
+
+def _nivel_score(score: int) -> str:
+    if score >= 90:
+        return "excelente"
+    if score >= 70:
+        return "bueno"
+    if score >= 40:
+        return "regular"
+    return "crítico"
+
+
+@router.get("/score-salud", response_model=ScoreSaludResponse)
+async def get_score_salud(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ScoreSaludResponse:
+    """Score de salud financiera 0-100 basado en 4 indicadores de 25 pts cada uno."""
+    uid = current_user.id
+    today = date.today()
+
+    # ── 1. LIQUIDEZ ───────────────────────────────────────────────────────────
+    hace_un_anio = today.replace(day=1) - timedelta(days=365)
+
+    ing_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.ingreso,
+            Registro.fecha >= hace_un_anio,
+        )
+    )
+    gasto_anio_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= hace_un_anio,
+        )
+    )
+    ingresos_anio = float(ing_q.scalar() or 0)
+    gastos_anio = float(gasto_anio_q.scalar() or 0)
+    balance_anio = ingresos_anio - gastos_anio
+
+    if balance_anio > 0:
+        pts_liquidez = 25
+    elif ingresos_anio > 0 and balance_anio >= -0.20 * ingresos_anio:
+        pts_liquidez = 12
+    else:
+        pts_liquidez = 0
+
+    # ── 2. DEUDA ──────────────────────────────────────────────────────────────
+    total_pagar_q = await db.execute(
+        select(func.coalesce(func.sum(CuentaPagar.monto), 0)).where(
+            CuentaPagar.user_id == uid,
+            CuentaPagar.pagado == False,  # noqa: E712
+        )
+    )
+    vencidas_q = await db.execute(
+        select(func.coalesce(func.sum(CuentaPagar.monto), 0)).where(
+            CuentaPagar.user_id == uid,
+            CuentaPagar.pagado == False,  # noqa: E712
+            CuentaPagar.fecha_vencimiento.isnot(None),
+            CuentaPagar.fecha_vencimiento < func.current_date(),
+        )
+    )
+    total_pagar = float(total_pagar_q.scalar() or 0)
+    vencidas_monto = float(vencidas_q.scalar() or 0)
+
+    if vencidas_monto == 0:
+        pts_deuda = 25
+    elif total_pagar > 0 and vencidas_monto < total_pagar * 0.30:
+        pts_deuda = 12
+    else:
+        pts_deuda = 0
+
+    # ── 3. PRODUCTIVIDAD ─────────────────────────────────────────────────────
+    cutoff_90 = today - timedelta(days=90)
+
+    ingr_ids_q = await db.execute(
+        select(Registro.potrero_id).where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.ingreso,
+            Registro.potrero_id.isnot(None),
+            Registro.fecha >= cutoff_90,
+        ).distinct()
+    )
+    ingr_ids = {row[0] for row in ingr_ids_q.all()}
+
+    anim_ids_q = await db.execute(
+        select(Animal.potrero_id)
+        .where(Animal.user_id == uid)
+        .group_by(Animal.potrero_id)
+        .having(func.sum(Animal.cantidad) > 0)
+    )
+    anim_ids = {row[0] for row in anim_ids_q.all()}
+
+    sin_ingr_count = len(anim_ids - ingr_ids)
+    pts_productividad = max(0, 25 - sin_ingr_count * 5)
+
+    # ── 4. COSTOS ─────────────────────────────────────────────────────────────
+    first_this = today.replace(day=1)
+    first_prev3 = _add_months(first_this, -3)
+
+    gasto_mes_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= first_this,
+        )
+    )
+    gasto_mes = float(gasto_mes_q.scalar() or 0)
+
+    gastos_prev_q = await db.execute(
+        select(
+            func.to_char(Registro.fecha, "YYYY-MM").label("mes"),
+            func.sum(Registro.monto).label("total"),
+        )
+        .where(
+            Registro.user_id == uid,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= first_prev3,
+            Registro.fecha < first_this,
+        )
+        .group_by("mes")
+    )
+    prev_rows = gastos_prev_q.all()
+    avg_prev = sum(float(r.total) for r in prev_rows) / 3 if prev_rows else 0
+
+    if avg_prev == 0:
+        pts_costos = 25
+    elif gasto_mes <= avg_prev:
+        pts_costos = 25
+    elif gasto_mes <= avg_prev * 1.30:
+        pts_costos = 12
+    else:
+        pts_costos = 0
+
+    # ── Totales ───────────────────────────────────────────────────────────────
+    score = pts_liquidez + pts_deuda + pts_productividad + pts_costos
+
+    detalle = {
+        "liquidez":      {"pts": pts_liquidez,      "max": 25, "label": "Liquidez financiera"},
+        "deuda":         {"pts": pts_deuda,          "max": 25, "label": "Gestión de deuda"},
+        "productividad": {"pts": pts_productividad,  "max": 25, "label": "Productividad de potreros"},
+        "costos":        {"pts": pts_costos,          "max": 25, "label": "Control de costos"},
+    }
+
+    return ScoreSaludResponse(
+        score=score,
+        nivel=_nivel_score(score),
+        detalle=detalle,
+        fecha_calculo=today,
+    )
