@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Download, Plus, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronDown, Download, Plus, ScanLine, TrendingDown, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { RegistrosTable } from "@/components/registros/RegistrosTable";
 import { RegistrosFilters } from "@/components/registros/RegistrosFilters";
 import { RegistroModal } from "@/components/registros/RegistroModal";
+import { EscanearFacturaModal } from "@/components/registros/EscanearFacturaModal";
 import { getRegistros, exportarRegistros } from "@/lib/registrosApi";
 import { useRegistrosStore } from "@/store/registrosStore";
 import { toast } from "@/hooks/useToast";
@@ -16,6 +17,7 @@ export default function RegistrosPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRegistro, setEditingRegistro] = useState<Registro | null>(null);
+  const [escanearOpen, setEscanearOpen] = useState(false);
   const [defaultTipo, setDefaultTipo] = useState<TipoMovimiento>("gasto");
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -108,6 +110,14 @@ export default function RegistrosPage() {
           </div>
 
           <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setEscanearOpen(true)}
+          >
+            <ScanLine className="h-4 w-4" />
+            Escanear factura
+          </Button>
+          <Button
             onClick={() => openNew("gasto")}
             variant="destructive"
             className="gap-2"
@@ -138,6 +148,12 @@ export default function RegistrosPage() {
           onEdit={openEdit}
         />
       </div>
+
+      {/* Escanear factura */}
+      <EscanearFacturaModal
+        open={escanearOpen}
+        onClose={() => setEscanearOpen(false)}
+      />
 
       {/* Modal */}
       <RegistroModal

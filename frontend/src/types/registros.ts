@@ -99,6 +99,15 @@ export interface RegistroFilters {
   limit: number;
 }
 
+export interface ExtraerComprobanteResponse {
+  monto: number | null;
+  proveedor: string | null;
+  fecha: string | null;
+  descripcion: string | null;
+  categoria_sugerida: string | null;
+  confianza: "alta" | "media" | "baja";
+}
+
 export interface ExportFilters {
   formato: "excel" | "pdf";
   tipo?: TipoMovimiento;

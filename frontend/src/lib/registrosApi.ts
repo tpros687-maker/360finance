@@ -1,6 +1,7 @@
 import { api } from "./axios";
 import type {
   ExportFilters,
+  ExtraerComprobanteResponse,
   PaginatedRegistros,
   Registro,
   RegistroCreate,
@@ -50,6 +51,17 @@ export async function uploadComprobante(registroId: number, file: File): Promise
   const res = await api.post<Registro>(`/registros/${registroId}/comprobante`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+  return res.data;
+}
+
+export async function extraerComprobante(file: File): Promise<ExtraerComprobanteResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await api.post<ExtraerComprobanteResponse>(
+    "/registros/extraer-comprobante",
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
   return res.data;
 }
 
