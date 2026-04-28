@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Map,
@@ -13,10 +14,13 @@ import {
   CreditCard,
   TrendingUp,
   ArrowLeftRight,
+  Bell,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
+import { getAlertas } from "@/lib/dashboardApi";
+import type { AlertaItem } from "@/types/dashboard";
 
 const BASE_NAV = [
   { to: "/dashboard",    label: "Dashboard",            icon: LayoutDashboard, negocioOnly: false, ssoHidden: false },
@@ -24,6 +28,7 @@ const BASE_NAV = [
   { to: "/registros",    label: "Registros",             icon: ClipboardList,   negocioOnly: false, ssoHidden: false },
   { to: "/rentabilidad", label: "Rentabilidad",          icon: TrendingUp,      negocioOnly: false, ssoHidden: false },
   { to: "/flujo-caja",  label: "Flujo de Caja",         icon: ArrowLeftRight,  negocioOnly: false, ssoHidden: false },
+  { to: "/alertas",     label: "Alertas",               icon: Bell,            negocioOnly: false, ssoHidden: false },
   { to: "/clientes",     label: "Clientes",              icon: Users,           negocioOnly: false, ssoHidden: false },
   { to: "/proveedores",  label: "Proveedores",           icon: Truck,           negocioOnly: false, ssoHidden: false },
   { to: "/asistente",    label: "Asistente IA",          icon: Bot,             negocioOnly: false, ssoHidden: false },
@@ -39,6 +44,14 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout } = useAuthStore();
+
+  const { data: alertas = [] } = useQuery<AlertaItem[]>({
+    queryKey: ["alertas"],
+    queryFn: getAlertas,
+    staleTime: 1000 * 60 * 2,
+    enabled: !!user,
+  });
+  const dangerCount = alertas.filter((a) => a.nivel === "danger").length;
 
   const navItems = BASE_NAV.filter(
     (item) =>
@@ -95,7 +108,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {to === "/alertas" && dangerCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {dangerCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

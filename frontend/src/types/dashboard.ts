@@ -1,5 +1,12 @@
 import type { ResumenCategoria, ResumenMes } from "./registros";
 
+export interface AlertaItem {
+  tipo: string;
+  nivel: "warning" | "danger" | "info";
+  titulo: string;
+  detalle: string;
+}
+
 export interface ItemFlujo {
   id: number;
   tipo: "cobro" | "pago";
