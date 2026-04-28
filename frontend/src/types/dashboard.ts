@@ -1,5 +1,12 @@
 import type { ResumenCategoria, ResumenMes } from "./registros";
 
+export interface RecomendacionIA {
+  titulo: string;
+  detalle: string;
+  prioridad: "alta" | "media" | "baja";
+  categoria: "finanzas" | "campo" | "ganaderia" | "general";
+}
+
 export interface AlertaItem {
   tipo: string;
   nivel: "warning" | "danger" | "info";
