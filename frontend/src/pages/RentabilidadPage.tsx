@@ -114,6 +114,15 @@ export default function RentabilidadPage() {
         fecha_desde: fechaDesde || undefined,
         fecha_hasta: fechaHasta || undefined,
       }),
+    select: (rows) =>
+      rows.map((r) => ({
+        ...r,
+        total_ingresos: parseFloat(String(r.total_ingresos)),
+        total_gastos: parseFloat(String(r.total_gastos)),
+        balance: parseFloat(String(r.balance)),
+        rentabilidad_pct: r.rentabilidad_pct != null ? parseFloat(String(r.rentabilidad_pct)) : null,
+        hectareas: r.hectareas != null ? parseFloat(String(r.hectareas)) : null,
+      })),
     placeholderData: (prev) => prev,
   });
 
