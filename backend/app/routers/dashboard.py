@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -21,8 +22,11 @@ from app.schemas.dashboard import (
     FlujoCajaResponse,
     ItemFlujo,
     MovimientoProximo,
+    RecomendacionIA,
     SemanaFlujo,
 )
+from app.services.asistente import _get_client as _groq_client
+from app.services.asistente import construir_contexto
 from app.schemas.registro import ResumenCategoria, ResumenMes
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -481,3 +485,50 @@ async def get_alertas(
     # ── Ordenar: danger → warning → info ─────────────────────────────────────
     alertas.sort(key=lambda a: _NIVEL_ORDER[a.nivel])
     return alertas
+
+
+_RECOMENDACIONES_SYSTEM = (
+    "Sos un asesor agropecuario experto. Analizá los datos del productor "
+    "y generá exactamente 4 recomendaciones concretas y accionables. "
+    "Respondé SOLO con JSON válido, sin texto extra, con este formato:\n"
+    '[{"titulo": "...", "detalle": "...", "prioridad": "alta|media|baja", '
+    '"categoria": "finanzas|campo|ganaderia|general"}]'
+)
+
+
+@router.get("/recomendaciones", response_model=list[RecomendacionIA])
+async def get_recomendaciones(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[RecomendacionIA]:
+    """Recomendaciones IA personalizadas basadas en los datos del productor."""
+    try:
+        contexto = await construir_contexto(current_user, db)
+        client = _groq_client()
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": _RECOMENDACIONES_SYSTEM},
+                {"role": "user", "content": contexto},
+            ],
+            max_tokens=1024,
+            temperature=0.5,
+        )
+
+        raw = (response.choices[0].message.content or "").strip()
+
+        # Strip markdown code fences if the model wraps the JSON
+        if raw.startswith("```"):
+            parts = raw.split("```", 2)
+            raw = parts[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            if len(parts) > 2:
+                raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+
+        data = json.loads(raw)
+        return [RecomendacionIA(**item) for item in data]
+    except Exception:
+        return []

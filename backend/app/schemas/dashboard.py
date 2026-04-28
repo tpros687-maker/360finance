@@ -21,6 +21,15 @@ class MovimientoProximo(BaseModel):
     fecha_programada: date
 
 
+# ── Recomendaciones IA ────────────────────────────────────────────────────────
+
+class RecomendacionIA(BaseModel):
+    titulo: str
+    detalle: str
+    prioridad: str  # alta | media | baja
+    categoria: str  # finanzas | campo | ganaderia | general
+
+
 # ── Alertas ───────────────────────────────────────────────────────────────────
 
 class AlertaItem(BaseModel):
