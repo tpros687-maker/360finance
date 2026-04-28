@@ -4,12 +4,13 @@ from decimal import Decimal
 
 from geoalchemy2 import Geography
 from groq import Groq
-from sqlalchemy import cast, func, select
+from sqlalchemy import case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.config import settings
 from app.models.categoria import Categoria, TipoMovimiento
+from app.models.cliente import CuentaCobrar, CuentaPagar
 from app.models.mapa import Animal, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
@@ -126,6 +127,138 @@ async def construir_contexto(user: User, db: AsyncSession) -> str:
     )
     movimientos_proximos = mov_q.all()
 
+    # ── Mes actual vs mismo mes año anterior ─────────────────────────────────
+    primer_mes = hoy.replace(day=1)
+    mismo_mes_ant = f"{hoy.year - 1}-{hoy.month:02d}"
+
+    gm_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid, Registro.tipo == TipoMovimiento.gasto, Registro.fecha >= primer_mes,
+        )
+    )
+    im_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid, Registro.tipo == TipoMovimiento.ingreso, Registro.fecha >= primer_mes,
+        )
+    )
+    gm_ant_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid, Registro.tipo == TipoMovimiento.gasto,
+            func.to_char(Registro.fecha, "YYYY-MM") == mismo_mes_ant,
+        )
+    )
+    im_ant_q = await db.execute(
+        select(func.coalesce(func.sum(Registro.monto), 0)).where(
+            Registro.user_id == uid, Registro.tipo == TipoMovimiento.ingreso,
+            func.to_char(Registro.fecha, "YYYY-MM") == mismo_mes_ant,
+        )
+    )
+    gastos_mes = float(gm_q.scalar() or 0)
+    ingresos_mes = float(im_q.scalar() or 0)
+    gastos_mes_ant = float(gm_ant_q.scalar() or 0)
+    ingresos_mes_ant = float(im_ant_q.scalar() or 0)
+
+    # ── Cuentas pendientes ───────────────────────────────────────────────────
+    tc_q = await db.execute(
+        select(func.coalesce(func.sum(CuentaCobrar.monto), 0)).where(
+            CuentaCobrar.user_id == uid, CuentaCobrar.pagado == False  # noqa: E712
+        )
+    )
+    tp_q = await db.execute(
+        select(func.coalesce(func.sum(CuentaPagar.monto), 0)).where(
+            CuentaPagar.user_id == uid, CuentaPagar.pagado == False  # noqa: E712
+        )
+    )
+    cv_q = await db.execute(
+        select(func.count(CuentaCobrar.id)).where(
+            CuentaCobrar.user_id == uid, CuentaCobrar.pagado == False,  # noqa: E712
+            CuentaCobrar.fecha_vencimiento.isnot(None),
+            CuentaCobrar.fecha_vencimiento < func.current_date(),
+        )
+    )
+    pv_q = await db.execute(
+        select(func.count(CuentaPagar.id)).where(
+            CuentaPagar.user_id == uid, CuentaPagar.pagado == False,  # noqa: E712
+            CuentaPagar.fecha_vencimiento.isnot(None),
+            CuentaPagar.fecha_vencimiento < func.current_date(),
+        )
+    )
+    total_cobrar = float(tc_q.scalar() or 0)
+    total_pagar = float(tp_q.scalar() or 0)
+    cobrar_venc = int(cv_q.scalar() or 0)
+    pagar_venc = int(pv_q.scalar() or 0)
+
+    # ── Potreros resumen (últimos 90 días) ───────────────────────────────────
+    cutoff_90 = hoy - timedelta(days=90)
+
+    potr_q = await db.execute(
+        select(
+            Potrero.id,
+            Potrero.nombre,
+            Potrero.hectareas,
+            func.coalesce(func.sum(Animal.cantidad), 0).label("animales"),
+        )
+        .outerjoin(Animal, Animal.potrero_id == Potrero.id)
+        .where(Potrero.user_id == uid)
+        .group_by(Potrero.id, Potrero.nombre, Potrero.hectareas)
+        .order_by(Potrero.nombre)
+    )
+    potreros_lista = potr_q.all()
+
+    reg_pot_q = await db.execute(
+        select(
+            Registro.potrero_id,
+            func.sum(case((Registro.tipo == TipoMovimiento.gasto, Registro.monto), else_=0)).label("gastos"),
+            func.sum(case((Registro.tipo == TipoMovimiento.ingreso, Registro.monto), else_=0)).label("ingresos"),
+        )
+        .where(
+            Registro.user_id == uid,
+            Registro.potrero_id.isnot(None),
+            Registro.fecha >= cutoff_90,
+        )
+        .group_by(Registro.potrero_id)
+    )
+    reg_por_potrero: dict[int, object] = {row.potrero_id: row for row in reg_pot_q.all()}
+
+    # ── Alertas activas ──────────────────────────────────────────────────────
+    alertas_ctx: list[str] = []
+
+    # Descanso excesivo
+    des_q = await db.execute(
+        select(Potrero.nombre, Potrero.fecha_descanso).where(
+            Potrero.user_id == uid,
+            Potrero.en_descanso == True,  # noqa: E712
+            Potrero.fecha_descanso.isnot(None),
+            Potrero.fecha_descanso <= hoy - timedelta(days=45),
+        )
+    )
+    for nombre_p, fd in des_q.all():
+        alertas_ctx.append(f"Potrero «{nombre_p}» lleva {(hoy - fd).days} días en descanso")
+
+    if cobrar_venc:
+        alertas_ctx.append(f"{cobrar_venc} cuenta(s) por cobrar vencida(s)")
+    if pagar_venc:
+        alertas_ctx.append(f"{pagar_venc} pago(s) a proveedor vencido(s)")
+
+    # Gasto elevado (vs promedio anual mensualizado)
+    avg_mensual = float(total_gastos) / 12 if total_gastos > 0 else 0
+    if avg_mensual > 0 and gastos_mes > avg_mensual * 1.30:
+        pct_el = (gastos_mes / avg_mensual - 1) * 100
+        alertas_ctx.append(f"Gastos del mes {pct_el:.0f}% por encima del promedio mensual")
+
+    # Potreros con animales sin ingresos en 90 días
+    ingr_ids_q = await db.execute(
+        select(Registro.potrero_id).where(
+            Registro.user_id == uid, Registro.tipo == TipoMovimiento.ingreso,
+            Registro.potrero_id.isnot(None), Registro.fecha >= cutoff_90,
+        ).distinct()
+    )
+    ingr_ids = {r[0] for r in ingr_ids_q.all()}
+    anim_ids = {row.id for row in potreros_lista if int(row.animales) > 0}  # type: ignore[arg-type]
+    for pid in anim_ids - ingr_ids:
+        nombre_p = next((r.nombre for r in potreros_lista if r.id == pid), str(pid))
+        alertas_ctx.append(f"Potrero «{nombre_p}» tiene animales sin ingresos en 90 días")
+
     # ── Armar texto de contexto ───────────────────────────────────────────────
     lineas = [
         f"DATOS DEL PRODUCTOR: {user.nombre} {user.apellido}",
@@ -169,6 +302,53 @@ async def construir_contexto(user: User, db: AsyncSession) -> str:
         lineas.append("")
         lineas.append("=== MOVIMIENTOS PRÓXIMOS ===")
         lineas.append("  • Sin movimientos programados para los próximos 7 días")
+
+    # ── Mes actual ────────────────────────────────────────────────────────────
+    lineas += [
+        "",
+        f"=== MES ACTUAL ({hoy.strftime('%m/%Y')}) ===",
+        f"- Gastos: ${gastos_mes:,.2f}",
+        f"- Ingresos: ${ingresos_mes:,.2f}",
+        f"- Balance del mes: ${ingresos_mes - gastos_mes:,.2f}",
+        f"  Comparación mismo mes año anterior ({mismo_mes_ant}):",
+        f"  Gastos ant.: ${gastos_mes_ant:,.2f}" + (
+            f" ({((gastos_mes / gastos_mes_ant - 1) * 100):+.0f}%)" if gastos_mes_ant > 0 else ""
+        ),
+        f"  Ingresos ant.: ${ingresos_mes_ant:,.2f}" + (
+            f" ({((ingresos_mes / ingresos_mes_ant - 1) * 100):+.0f}%)" if ingresos_mes_ant > 0 else ""
+        ),
+    ]
+
+    # ── Cuentas pendientes ────────────────────────────────────────────────────
+    lineas += [
+        "",
+        "=== CUENTAS PENDIENTES ===",
+        f"- Por cobrar: ${total_cobrar:,.2f}" + (f" ({cobrar_venc} vencida(s))" if cobrar_venc else ""),
+        f"- Por pagar:  ${total_pagar:,.2f}" + (f" ({pagar_venc} vencida(s))" if pagar_venc else ""),
+    ]
+
+    # ── Potreros resumen ──────────────────────────────────────────────────────
+    if potreros_lista:
+        lineas.append("")
+        lineas.append("=== POTREROS — RESUMEN (últimos 90 días) ===")
+        for row in potreros_lista:
+            reg = reg_por_potrero.get(row.id)  # type: ignore[union-attr]
+            g = float(reg.gastos) if reg else 0  # type: ignore[union-attr]
+            i = float(reg.ingresos) if reg else 0  # type: ignore[union-attr]
+            ha = f"{float(row.hectareas):.1f} ha" if row.hectareas else "sin ha registradas"
+            lineas.append(
+                f"  • {row.nombre} ({ha}, {int(row.animales)} animales): "
+                f"gastos ${g:,.0f}, ingresos ${i:,.0f}"
+            )
+
+    # ── Alertas activas ───────────────────────────────────────────────────────
+    lineas.append("")
+    lineas.append("=== ALERTAS ACTIVAS ===")
+    if alertas_ctx:
+        for a in alertas_ctx:
+            lineas.append(f"  ⚠ {a}")
+    else:
+        lineas.append("  • Sin alertas activas")
 
     return "\n".join(lineas)
 
