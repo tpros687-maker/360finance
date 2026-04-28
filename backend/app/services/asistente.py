@@ -360,15 +360,11 @@ async def chat(
 ) -> str:
     client = _get_client()
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + contexto}]
 
-    if not historial:
-        messages.append({"role": "user", "content": f"[CONTEXTO DEL PRODUCTOR]\n{contexto}"})
-        messages.append({"role": "assistant", "content": "Entendido. Tengo acceso a tus datos y estoy listo para ayudarte."})
-    else:
-        for msg in historial:
-            role = "user" if msg.role == "user" else "assistant"
-            messages.append({"role": role, "content": msg.content})
+    for msg in historial:
+        role = "user" if msg.role == "user" else "assistant"
+        messages.append({"role": role, "content": msg.content})
 
     messages.append({"role": "user", "content": mensaje})
 
