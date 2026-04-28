@@ -136,3 +136,14 @@ class ResumenResponse(BaseModel):
     balance: Decimal
     por_categoria: list[ResumenCategoria]
     por_mes: list[ResumenMes]
+
+
+# ── Extracción de comprobante ─────────────────────────────────────────────────
+
+class ExtraerComprobanteResponse(BaseModel):
+    monto: Optional[float]
+    proveedor: Optional[str]
+    fecha: Optional[str]
+    descripcion: Optional[str]
+    categoria_sugerida: Optional[str]
+    confianza: str  # "alta" | "media" | "baja"

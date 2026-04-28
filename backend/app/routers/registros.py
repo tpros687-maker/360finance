@@ -1,4 +1,6 @@
+import base64
 import io
+import json
 import math
 import os
 import uuid
@@ -18,6 +20,7 @@ from app.models.mapa import Potrero
 from app.models.registro import Registro
 from app.models.user import User
 from app.schemas.registro import (
+    ExtraerComprobanteResponse,
     PaginatedRegistros,
     RegistroCreate,
     RegistroRead,
@@ -26,6 +29,7 @@ from app.schemas.registro import (
     ResumenMes,
     ResumenResponse,
 )
+from app.services.asistente import _get_client as _groq_client
 
 router = APIRouter(prefix="/registros", tags=["registros"])
 
@@ -350,6 +354,94 @@ async def create_registro(
     await db.refresh(registro)
     result = await db.execute(select(Registro).where(Registro.id == registro.id))
     return result.scalar_one()
+
+
+_MIME_MAP: dict[str, str] = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "pdf": "application/pdf",
+}
+
+_EXTRACCION_PROMPT = (
+    'Analizá esta factura o comprobante y extraé la información en JSON válido sin texto extra:\n'
+    '{"monto": número o null, "proveedor": string o null, "fecha": "YYYY-MM-DD" o null, '
+    '"descripcion": string breve o null, "categoria_sugerida": string o null}'
+)
+
+
+def _confianza(data: dict) -> str:
+    filled = sum(1 for k in ("monto", "proveedor", "fecha") if data.get(k) is not None)
+    if filled >= 3:
+        return "alta"
+    if filled >= 2:
+        return "media"
+    return "baja"
+
+
+@router.post("/extraer-comprobante", response_model=ExtraerComprobanteResponse)
+async def extraer_comprobante(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> ExtraerComprobanteResponse:
+    """Extrae datos de una factura o comprobante usando visión IA."""
+    _empty = ExtraerComprobanteResponse(
+        monto=None, proveedor=None, fecha=None,
+        descripcion=None, categoria_sugerida=None, confianza="baja",
+    )
+
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Formato no permitido. Usá: {', '.join(ALLOWED_EXTENSIONS)}",
+        )
+
+    try:
+        content = await file.read()
+        b64 = base64.b64encode(content).decode("utf-8")
+        mime = _MIME_MAP.get(ext, "image/jpeg")
+
+        client = _groq_client()
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime};base64,{b64}"},
+                        },
+                        {"type": "text", "text": _EXTRACCION_PROMPT},
+                    ],
+                }
+            ],
+            max_tokens=512,
+            temperature=0.1,
+        )
+
+        raw = (response.choices[0].message.content or "").strip()
+        if raw.startswith("```"):
+            parts = raw.split("```", 2)
+            raw = parts[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            if len(parts) > 2:
+                raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+
+        data: dict = json.loads(raw)
+        return ExtraerComprobanteResponse(
+            monto=float(data["monto"]) if data.get("monto") is not None else None,
+            proveedor=data.get("proveedor"),
+            fecha=data.get("fecha"),
+            descripcion=data.get("descripcion"),
+            categoria_sugerida=data.get("categoria_sugerida"),
+            confianza=_confianza(data),
+        )
+    except Exception:
+        return _empty
 
 
 @router.put("/{registro_id}", response_model=RegistroRead)
