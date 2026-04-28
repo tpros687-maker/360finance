@@ -1,5 +1,23 @@
 import type { ResumenCategoria, ResumenMes } from "./registros";
 
+export interface IndicadorSalud {
+  pts: number;
+  max: number;
+  label: string;
+}
+
+export interface ScoreSaludResponse {
+  score: number;
+  nivel: "crítico" | "regular" | "bueno" | "excelente";
+  detalle: {
+    liquidez: IndicadorSalud;
+    deuda: IndicadorSalud;
+    productividad: IndicadorSalud;
+    costos: IndicadorSalud;
+  };
+  fecha_calculo: string;
+}
+
 export interface RecomendacionIA {
   titulo: string;
   detalle: string;

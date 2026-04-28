@@ -1,5 +1,5 @@
 import { api } from "./axios";
-import type { AlertaItem, DashboardResumen, FlujoCajaResponse, RecomendacionIA } from "@/types/dashboard";
+import type { AlertaItem, DashboardResumen, FlujoCajaResponse, RecomendacionIA, ScoreSaludResponse } from "@/types/dashboard";
 
 export async function getDashboardResumen(): Promise<DashboardResumen> {
   const res = await api.get<DashboardResumen>("/dashboard/resumen");
@@ -18,5 +18,10 @@ export async function getAlertas(): Promise<AlertaItem[]> {
 
 export async function getRecomendaciones(): Promise<RecomendacionIA[]> {
   const res = await api.get<RecomendacionIA[]>("/dashboard/recomendaciones");
+  return res.data;
+}
+
+export async function getScoreSalud(): Promise<ScoreSaludResponse> {
+  const res = await api.get<ScoreSaludResponse>("/dashboard/score-salud");
   return res.data;
 }

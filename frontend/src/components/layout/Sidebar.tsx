@@ -16,6 +16,7 @@ import {
   ArrowLeftRight,
   Bell,
   Brain,
+  Activity,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ const BASE_NAV = [
   { to: "/flujo-caja",  label: "Flujo de Caja",         icon: ArrowLeftRight,  negocioOnly: false, ssoHidden: false },
   { to: "/alertas",         label: "Alertas",               icon: Bell,            negocioOnly: false, ssoHidden: false },
   { to: "/recomendaciones", label: "Decisiones IA",         icon: Brain,           negocioOnly: false, ssoHidden: false },
+  { to: "/score-salud",     label: "Score de Salud",        icon: Activity,        negocioOnly: false, ssoHidden: false },
   { to: "/clientes",     label: "Clientes",              icon: Users,           negocioOnly: false, ssoHidden: false },
   { to: "/proveedores",  label: "Proveedores",           icon: Truck,           negocioOnly: false, ssoHidden: false },
   { to: "/asistente",    label: "Asistente IA",          icon: Bot,             negocioOnly: false, ssoHidden: false },

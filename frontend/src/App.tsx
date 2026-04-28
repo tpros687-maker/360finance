@@ -32,6 +32,7 @@ const RentabilidadPage = lazy(() => import("@/pages/RentabilidadPage"));
 const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 const AlertasPage = lazy(() => import("@/pages/AlertasPage"));
 const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
+const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +74,7 @@ function AppRoutes() {
             <Route path="/flujo-caja" element={<FlujoCajaPage />} />
             <Route path="/alertas" element={<AlertasPage />} />
             <Route path="/recomendaciones" element={<RecomendacionesPage />} />
+            <Route path="/score-salud" element={<ScoreSaludPage />} />
           </Route>
         </Route>
 
