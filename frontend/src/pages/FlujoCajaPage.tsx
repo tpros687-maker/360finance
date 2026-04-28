@@ -176,6 +176,39 @@ export default function FlujoCajaPage() {
     queryKey: ["flujo-caja"],
     queryFn: getFlujoCaja,
     staleTime: 1000 * 60 * 5,
+    select: (d) => ({
+      ...d,
+      total_por_cobrar: parseFloat(String(d.total_por_cobrar)),
+      total_por_pagar: parseFloat(String(d.total_por_pagar)),
+      balance_proyectado: parseFloat(String(d.balance_proyectado)),
+      cobros_pendientes: (d.cobros_pendientes ?? []).map((c) => ({
+        ...c,
+        monto: parseFloat(String(c.monto)),
+        dias_restantes: c.dias_restantes != null ? Number(c.dias_restantes) : null,
+      })),
+      pagos_pendientes: (d.pagos_pendientes ?? []).map((p) => ({
+        ...p,
+        monto: parseFloat(String(p.monto)),
+        dias_restantes: p.dias_restantes != null ? Number(p.dias_restantes) : null,
+      })),
+      cobros_vencidos: (d.cobros_vencidos ?? []).map((c) => ({
+        ...c,
+        monto: parseFloat(String(c.monto)),
+        dias_restantes: c.dias_restantes != null ? Number(c.dias_restantes) : null,
+      })),
+      pagos_vencidos: (d.pagos_vencidos ?? []).map((p) => ({
+        ...p,
+        monto: parseFloat(String(p.monto)),
+        dias_restantes: p.dias_restantes != null ? Number(p.dias_restantes) : null,
+      })),
+      semanas: (d.semanas ?? []).map((s) => ({
+        ...s,
+        cobros: parseFloat(String(s.cobros)),
+        pagos: parseFloat(String(s.pagos)),
+        balance_semana: parseFloat(String(s.balance_semana)),
+        balance_acumulado: parseFloat(String(s.balance_acumulado)),
+      })),
+    }),
   });
 
   if (isLoading || !data) {
@@ -193,8 +226,9 @@ export default function FlujoCajaPage() {
 
   const hayVencidos = data.cobros_vencidos.length > 0 || data.pagos_vencidos.length > 0;
   const hayPendientes = data.cobros_pendientes.length > 0 || data.pagos_pendientes.length > 0;
+  const hayDatos = hayVencidos || hayPendientes || data.total_por_cobrar > 0 || data.total_por_pagar > 0;
 
-  if (!hayVencidos && !hayPendientes) {
+  if (!hayDatos) {
     return (
       <div className="p-6 page-fade">
         <h1 className="text-2xl font-bold text-agro-text mb-2">Flujo de Caja Proyectado</h1>
