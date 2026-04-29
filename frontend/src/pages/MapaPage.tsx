@@ -541,7 +541,11 @@ export default function MapaPage() {
       {/* Mobile confirm button — appears after 3 vertices in draw mode */}
       {isDrawing && drawnPoints >= 3 && (
         <button
-          onClick={() => drawRef.current?.changeMode("simple_select")}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            drawRef.current?.changeMode("simple_select");
+          }}
           className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 bg-agro-primary text-white font-semibold py-3 px-8 rounded-full shadow-xl hover:bg-agro-primary/90 active:scale-95 transition-all text-base"
         >
           ✓ Confirmar potrero
