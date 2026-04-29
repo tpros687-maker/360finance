@@ -357,9 +357,15 @@ export default function MapaPage() {
     const map = mapRef.current;
     if (!map || !isDrawing) return;
 
-    const onVertexClick = () => setDrawnPoints((n) => n + 1);
-    map.on("click", onVertexClick);
-    return () => { map.off("click", onVertexClick); };
+    const onVertex = () => setDrawnPoints((n) => n + 1);
+
+    map.on("click", onVertex);
+    map.on("touchend", onVertex);
+
+    return () => {
+      map.off("click", onVertex);
+      map.off("touchend", onVertex);
+    };
   }, [isDrawing]);
 
   // ── Point-of-interest click handler ───────────────────────────────────────
@@ -539,7 +545,7 @@ export default function MapaPage() {
       )}
 
       {/* Mobile confirm button — appears after 3 vertices in draw mode */}
-      {isDrawing && drawnPoints >= 3 && (
+      {isDrawing && drawnPoints >= 2 && (
         <button
           onClick={(e) => {
             e.preventDefault();
