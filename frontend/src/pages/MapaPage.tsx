@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import turfArea from "@turf/area";
@@ -85,6 +85,9 @@ export default function MapaPage() {
   const tooltipRef = useRef<mapboxgl.Popup | null>(null);
   const mapReadyRef = useRef(false);
   const potrerosRef = useRef<Potrero[]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawnPoints, setDrawnPoints] = useState(0);
+
   const qc = useQueryClient();
   const {
     potreros,
@@ -334,6 +337,31 @@ export default function MapaPage() {
     };
   }, [createPotreroMutation]);
 
+  // ── Track drawing mode for mobile confirm button ───────────────────────────
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const onModeChange = (e: any) => {
+      setIsDrawing(e.mode === "draw_polygon");
+      setDrawnPoints(0);
+    };
+
+    map.on("draw.modechange", onModeChange);
+    return () => { map.off("draw.modechange", onModeChange); };
+  }, []);
+
+  // Count vertices added while in draw_polygon mode
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isDrawing) return;
+
+    const onVertexClick = () => setDrawnPoints((n) => n + 1);
+    map.on("click", onVertexClick);
+    return () => { map.off("click", onVertexClick); };
+  }, [isDrawing]);
+
   // ── Point-of-interest click handler ───────────────────────────────────────
 
   useEffect(() => {
@@ -508,6 +536,16 @@ export default function MapaPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Mobile confirm button — appears after 3 vertices in draw mode */}
+      {isDrawing && drawnPoints >= 3 && (
+        <button
+          onClick={() => drawRef.current?.changeMode("simple_select")}
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 bg-agro-primary text-white font-semibold py-3 px-8 rounded-full shadow-xl hover:bg-agro-primary/90 active:scale-95 transition-all text-base"
+        >
+          ✓ Confirmar potrero
+        </button>
       )}
 
       {/* Movimientos panel toggle button */}
