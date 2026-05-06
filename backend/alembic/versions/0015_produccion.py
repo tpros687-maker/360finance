@@ -1,6 +1,6 @@
 """add lotes_ganado, eventos_reproductivos, ciclos_agricolas
 
-Revision ID: 0015_prod
+Revision ID: 0015_produccion
 Revises: 0014_coneat
 Create Date: 2026-05-06
 """
@@ -9,7 +9,7 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0015_prod"
+revision: str = "0015_produccion"
 down_revision: Union[str, None] = "0014_coneat"
 branch_labels = None
 depends_on = None
