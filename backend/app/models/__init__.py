@@ -5,6 +5,7 @@ from app.models.mapa import Animal, MovimientoGanado, Potrero, PuntoInteres
 from app.models.cliente import Cliente, CuentaCobrar, Proveedor, CuentaPagar
 from app.models.producto import Producto
 from app.models.pago import PagoHistorial
+from app.models.produccion import CicloAgricola, EventoReproductivo, LoteGanado
 
 __all__ = [
     "User",
@@ -21,4 +22,7 @@ __all__ = [
     "CuentaPagar",
     "Producto",
     "PagoHistorial",
+    "LoteGanado",
+    "EventoReproductivo",
+    "CicloAgricola",
 ]
