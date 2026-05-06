@@ -32,6 +32,8 @@ class PotreroCreate(BaseModel):
     cultivo: Optional[str] = None
     es_primera: Optional[bool] = None
     fecha_siembra: Optional[date] = None
+    coneat: Optional[Decimal] = None
+    kg_producidos_anio: Optional[Decimal] = None
 
 
 class PotreroUpdate(BaseModel):
@@ -50,6 +52,8 @@ class PotreroUpdate(BaseModel):
     cultivo: Optional[str] = None
     es_primera: Optional[bool] = None
     fecha_siembra: Optional[date] = None
+    coneat: Optional[Decimal] = None
+    kg_producidos_anio: Optional[Decimal] = None
 
 
 class PotreroRead(BaseModel):
@@ -72,6 +76,8 @@ class PotreroRead(BaseModel):
     cultivo: Optional[str] = None
     es_primera: Optional[bool] = None
     fecha_siembra: Optional[date] = None
+    coneat: Optional[Decimal] = None
+    kg_producidos_anio: Optional[Decimal] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -189,3 +195,6 @@ class RentabilidadPotrero(BaseModel):
     balance: Decimal
     rentabilidad_pct: Optional[Decimal]
     cantidad_animales: int
+    margen_bruto_ha: Optional[Decimal]
+    carga_animal_ug_ha: Optional[Decimal]
+    produccion_kg_ha: Optional[Decimal]

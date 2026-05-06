@@ -78,6 +78,8 @@ class Potrero(Base):
     dias_por_franja: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     observaciones: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     hectareas: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    coneat: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 1), nullable=True)
+    kg_producidos_anio: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     en_descanso: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fecha_descanso: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     cultivo: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)

@@ -50,6 +50,8 @@ def _potrero_to_read(p: Potrero) -> PotreroRead:
         cultivo=p.cultivo,
         es_primera=p.es_primera,
         fecha_siembra=p.fecha_siembra,
+        coneat=p.coneat,
+        kg_producidos_anio=p.kg_producidos_anio,
         created_at=p.created_at,
     )
 
@@ -96,6 +98,8 @@ async def create_potrero(
         franjas_usadas=payload.franjas_usadas,
         dias_por_franja=payload.dias_por_franja,
         observaciones=payload.observaciones,
+        coneat=payload.coneat,
+        kg_producidos_anio=payload.kg_producidos_anio,
     )
     db.add(potrero)
     await db.commit()
@@ -144,6 +148,8 @@ async def get_rentabilidad(
             Potrero.id.label("potrero_id"),
             Potrero.nombre,
             Potrero.hectareas,
+            Potrero.coneat,
+            Potrero.kg_producidos_anio,
             ingresos_col.label("total_ingresos"),
             gastos_col.label("total_gastos"),
             func.coalesce(animals_sq.c.total_animales, 0).label("cantidad_animales"),
@@ -151,19 +157,32 @@ async def get_rentabilidad(
         .outerjoin(Registro, and_(*reg_join))
         .outerjoin(animals_sq, animals_sq.c.potrero_id == Potrero.id)
         .where(Potrero.user_id == current_user.id)
-        .group_by(Potrero.id, Potrero.nombre, Potrero.hectareas, animals_sq.c.total_animales)
+        .group_by(
+            Potrero.id, Potrero.nombre, Potrero.hectareas,
+            Potrero.coneat, Potrero.kg_producidos_anio,
+            animals_sq.c.total_animales,
+        )
         .order_by((ingresos_col - gastos_col).desc())
     )
 
     result = await db.execute(stmt)
     rows = result.all()
 
+    Q2 = Decimal("0.01")
     out: list[RentabilidadPotrero] = []
     for row in rows:
         ingresos = Decimal(str(row.total_ingresos))
         gastos = Decimal(str(row.total_gastos))
         balance = ingresos - gastos
-        rent_pct = (balance / gastos * 100).quantize(Decimal("0.01")) if gastos > 0 else None
+        rent_pct = (balance / gastos * 100).quantize(Q2) if gastos > 0 else None
+        ha = Decimal(str(row.hectareas)) if row.hectareas else None
+        animales = int(row.cantidad_animales)
+        kg_anio = Decimal(str(row.kg_producidos_anio)) if row.kg_producidos_anio else None
+
+        margen_bruto_ha = (balance / ha).quantize(Q2) if ha and ha > 0 else None
+        carga_animal_ug_ha = (Decimal(str(animales)) * Decimal("0.8") / ha).quantize(Q2) if ha and ha > 0 else None
+        produccion_kg_ha = (kg_anio / ha).quantize(Q2) if kg_anio and ha and ha > 0 else None
+
         out.append(
             RentabilidadPotrero(
                 potrero_id=row.potrero_id,
@@ -173,7 +192,10 @@ async def get_rentabilidad(
                 total_gastos=gastos,
                 balance=balance,
                 rentabilidad_pct=rent_pct,
-                cantidad_animales=int(row.cantidad_animales),
+                cantidad_animales=animales,
+                margen_bruto_ha=margen_bruto_ha,
+                carga_animal_ug_ha=carga_animal_ug_ha,
+                produccion_kg_ha=produccion_kg_ha,
             )
         )
     return out
@@ -218,6 +240,10 @@ async def update_potrero(
         potrero.es_primera = payload.es_primera
     if payload.fecha_siembra is not None:
         potrero.fecha_siembra = payload.fecha_siembra
+    if payload.coneat is not None:
+        potrero.coneat = payload.coneat
+    if payload.kg_producidos_anio is not None:
+        potrero.kg_producidos_anio = payload.kg_producidos_anio
 
     await db.commit()
     await db.refresh(potrero)
