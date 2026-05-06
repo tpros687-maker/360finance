@@ -341,7 +341,7 @@ export function PanelLateral() {
         </div>
 
         {/* Estado del pasto */}
-        <div>
+        {tipoActual !== "agricultura" && <div>
           <Label className="text-agro-muted text-xs">Estado del pasto</Label>
           <div className="mt-1 flex gap-2">
             {(["bueno", "regular", "malo"] as EstadoPasto[]).map((est) => {
@@ -363,7 +363,7 @@ export function PanelLateral() {
               );
             })}
           </div>
-        </div>
+        </div>}
 
         {/* ── MODO GANADERÍA / MIXTO ─────────────────────────────────────── */}
         {tipoActual !== "agricultura" && (
@@ -713,7 +713,7 @@ export function PanelLateral() {
         )}
 
         {/* ── Historial de movimientos ───────────────────────────────────── */}
-        <div className="border border-agro-accent/20 rounded-md overflow-hidden">
+        {tipoActual !== "agricultura" && <div className="border border-agro-accent/20 rounded-md overflow-hidden">
           <button
             type="button"
             onClick={() => setHistorialExpanded((v) => !v)}
@@ -794,7 +794,7 @@ export function PanelLateral() {
               )}
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Footer */}
@@ -807,15 +807,17 @@ export function PanelLateral() {
         >
           {isSaving ? "Guardando..." : "Guardar"}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setModalMovimientoOpen(true)}
-          className="w-full border-agro-accent/20 text-agro-muted hover:bg-agro-bg text-sm"
-        >
-          <ArrowRightLeft className="w-4 h-4 mr-2" />
-          Programar movimiento
-        </Button>
+        {tipoActual !== "agricultura" && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setModalMovimientoOpen(true)}
+            className="w-full border-agro-accent/20 text-agro-muted hover:bg-agro-bg text-sm"
+          >
+            <ArrowRightLeft className="w-4 h-4 mr-2" />
+            Programar movimiento
+          </Button>
+        )}
         <Button
           type="button"
           variant="destructive"
