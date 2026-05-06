@@ -53,7 +53,7 @@ const BASE_NAV = [
   { to: "/dashboard",       label: "Dashboard",            icon: LayoutDashboard, negocioOnly: false, ssoHidden: false },
   { to: "/mapa",            label: "Mapa",                 icon: Map,             negocioOnly: false, ssoHidden: false },
   { to: "/registros",       label: "Registros",            icon: ClipboardList,   negocioOnly: false, ssoHidden: false },
-  { to: "/rentabilidad",    label: "Rentabilidad",         icon: TrendingUp,      negocioOnly: false, ssoHidden: false },
+  { to: "/productividad",   label: "Productividad",        icon: TrendingUp,      negocioOnly: false, ssoHidden: false },
   { to: "/flujo-caja",      label: "Flujo de Caja",        icon: ArrowLeftRight,  negocioOnly: false, ssoHidden: false },
   { to: "/recomendaciones", label: "Decisiones IA",        icon: Brain,           negocioOnly: false, ssoHidden: false },
   { to: "/score-salud",     label: "Score de Salud",       icon: Activity,        negocioOnly: false, ssoHidden: false },
