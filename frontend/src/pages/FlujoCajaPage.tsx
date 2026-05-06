@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ComposedChart,
   Bar,
@@ -11,11 +11,17 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { TrendingUp, TrendingDown, AlertTriangle, Wallet, ArrowLeftRight } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle, Wallet, Plus, X } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getFlujoCaja } from "@/lib/dashboardApi";
+import { getClientes, createCuenta } from "@/lib/clientesApi";
+import { getProveedores, createCuentaPagar } from "@/lib/proveedoresApi";
 import { useAuthStore } from "@/store/authStore";
+import { toast } from "@/hooks/useToast";
 import type { ItemFlujo } from "@/types/dashboard";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -69,7 +75,7 @@ function PendingTable({ items, tipo }: { items: ItemFlujo[]; tipo: "cobro" | "pa
   const moneda = useAuthStore((s) => s.user?.moneda ?? "UYU");
   const label = tipo === "cobro" ? "Cliente" : "Proveedor";
   if (items.length === 0)
-    return <p className="text-agro-muted text-sm italic px-1 py-3">Sin {tipo === "cobro" ? "cobros" : "pagos"} pendientes.</p>;
+    return <p className="text-agro-muted text-sm italic px-4 py-3">Sin {tipo === "cobro" ? "cobros" : "pagos"} pendientes.</p>;
 
   return (
     <div className="overflow-x-auto">
@@ -91,7 +97,7 @@ function PendingTable({ items, tipo }: { items: ItemFlujo[]; tipo: "cobro" | "pa
                 {item.descripcion ?? "—"}
               </td>
               <td className="px-3 py-2.5 text-right font-medium text-agro-text">
-                {fmt(item.monto, item.moneda)}
+                {fmt(item.monto, item.moneda ?? moneda)}
               </td>
               <td className="px-3 py-2.5 text-right text-agro-muted">{fmtFecha(item.fecha_vencimiento)}</td>
               <td className="px-3 py-2.5 text-right">
@@ -139,7 +145,7 @@ function VencidosSection({ cobrosV, pagosV }: { cobrosV: ItemFlujo[]; pagosV: It
               {item.descripcion && <p className="text-xs text-agro-muted truncate">{item.descripcion}</p>}
             </div>
             <div className="text-right ml-4 shrink-0">
-              <p className="text-sm font-semibold text-agro-text">{fmt(item.monto, item.moneda)}</p>
+              <p className="text-sm font-semibold text-agro-text">{fmt(item.monto, item.moneda ?? moneda)}</p>
               <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">
                 Vencido hace {Math.abs(item.dias_restantes ?? 0)}d
               </span>
@@ -151,7 +157,7 @@ function VencidosSection({ cobrosV, pagosV }: { cobrosV: ItemFlujo[]; pagosV: It
   );
 }
 
-// ── Custom tooltip para el gráfico ────────────────────────────────────────────
+// ── Custom tooltip ────────────────────────────────────────────────────────────
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -164,6 +170,290 @@ function ChartTooltip({ active, payload, label }: any) {
         </p>
       ))}
     </div>
+  );
+}
+
+// ── Form state ────────────────────────────────────────────────────────────────
+
+interface CuentaForm {
+  entidad_id: string;
+  monto: string;
+  moneda: string;
+  fecha_vencimiento: string;
+  descripcion: string;
+}
+
+const EMPTY_FORM: CuentaForm = {
+  entidad_id: "",
+  monto: "",
+  moneda: "UYU",
+  fecha_vencimiento: "",
+  descripcion: "",
+};
+
+// ── Sección Cobros ────────────────────────────────────────────────────────────
+
+function CobrosSection({ items }: { items: ItemFlujo[] }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<CuentaForm>(EMPTY_FORM);
+
+  const { data: clientes = [] } = useQuery({
+    queryKey: ["clientes"],
+    queryFn: getClientes,
+    staleTime: 60000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createCuenta(parseInt(form.entidad_id), {
+        monto: parseFloat(form.monto),
+        moneda: form.moneda,
+        fecha_vencimiento: form.fecha_vencimiento || undefined,
+        descripcion: form.descripcion.trim() || undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["flujo-caja"] });
+      toast({ title: "Cobro registrado" });
+      setOpen(false);
+      setForm(EMPTY_FORM);
+    },
+    onError: () => toast({ title: "Error al registrar cobro", variant: "destructive" }),
+  });
+
+  const valid = !!form.entidad_id && parseFloat(form.monto) > 0;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base text-agro-text flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-emerald-500" />
+            Cobros a realizar
+          </CardTitle>
+          <button
+            onClick={() => { setOpen((v) => !v); setForm(EMPTY_FORM); }}
+            className="flex items-center gap-1 text-xs text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-md px-2.5 py-1.5 transition-colors"
+          >
+            {open ? <X className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+            {open ? "Cancelar" : "Agregar cobro"}
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0 pb-2">
+        {open && (
+          <div className="mx-4 mb-4 p-4 border border-emerald-200 bg-emerald-50/40 rounded-lg space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <Label className="text-agro-muted text-xs">Cliente *</Label>
+                <select
+                  value={form.entidad_id}
+                  onChange={(e) => setForm((f) => ({ ...f, entidad_id: e.target.value }))}
+                  className="mt-1 w-full bg-white border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2"
+                >
+                  <option value="">Seleccionar cliente...</option>
+                  {clientes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Monto *</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.monto}
+                  onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}
+                  className="mt-1 bg-white border-agro-accent/20 text-agro-text"
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Moneda</Label>
+                <select
+                  value={form.moneda}
+                  onChange={(e) => setForm((f) => ({ ...f, moneda: e.target.value }))}
+                  className="mt-1 w-full bg-white border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2"
+                >
+                  <option value="UYU">UYU</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Fecha vencimiento</Label>
+                <Input
+                  type="date"
+                  value={form.fecha_vencimiento}
+                  onChange={(e) => setForm((f) => ({ ...f, fecha_vencimiento: e.target.value }))}
+                  className="mt-1 bg-white border-agro-accent/20 text-agro-text"
+                />
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Descripción</Label>
+                <Input
+                  value={form.descripcion}
+                  onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+                  className="mt-1 bg-white border-agro-accent/20 text-agro-text"
+                  placeholder="Opcional"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
+                disabled={!valid || mutation.isPending}
+                onClick={() => mutation.mutate()}
+              >
+                {mutation.isPending ? "Guardando..." : "Guardar cobro"}
+              </Button>
+              <Button
+                variant="outline"
+                className="text-sm border-agro-accent/20 text-agro-muted"
+                onClick={() => { setOpen(false); setForm(EMPTY_FORM); }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+        <PendingTable items={items} tipo="cobro" />
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Sección Pagos ─────────────────────────────────────────────────────────────
+
+function PagosSection({ items }: { items: ItemFlujo[] }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<CuentaForm>(EMPTY_FORM);
+
+  const { data: proveedores = [] } = useQuery({
+    queryKey: ["proveedores"],
+    queryFn: getProveedores,
+    staleTime: 60000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createCuentaPagar(parseInt(form.entidad_id), {
+        monto: parseFloat(form.monto),
+        moneda: form.moneda,
+        fecha_vencimiento: form.fecha_vencimiento || undefined,
+        descripcion: form.descripcion.trim() || undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["flujo-caja"] });
+      toast({ title: "Pago registrado" });
+      setOpen(false);
+      setForm(EMPTY_FORM);
+    },
+    onError: () => toast({ title: "Error al registrar pago", variant: "destructive" }),
+  });
+
+  const valid = !!form.entidad_id && parseFloat(form.monto) > 0;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base text-agro-text flex items-center gap-2">
+            <TrendingDown className="h-4 w-4 text-red-500" />
+            Pagos a realizar
+          </CardTitle>
+          <button
+            onClick={() => { setOpen((v) => !v); setForm(EMPTY_FORM); }}
+            className="flex items-center gap-1 text-xs text-red-700 border border-red-200 bg-red-50 hover:bg-red-100 rounded-md px-2.5 py-1.5 transition-colors"
+          >
+            {open ? <X className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+            {open ? "Cancelar" : "Agregar pago"}
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0 pb-2">
+        {open && (
+          <div className="mx-4 mb-4 p-4 border border-red-200 bg-red-50/40 rounded-lg space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <Label className="text-agro-muted text-xs">Proveedor *</Label>
+                <select
+                  value={form.entidad_id}
+                  onChange={(e) => setForm((f) => ({ ...f, entidad_id: e.target.value }))}
+                  className="mt-1 w-full bg-white border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2"
+                >
+                  <option value="">Seleccionar proveedor...</option>
+                  {proveedores.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Monto *</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.monto}
+                  onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}
+                  className="mt-1 bg-white border-agro-accent/20 text-agro-text"
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Moneda</Label>
+                <select
+                  value={form.moneda}
+                  onChange={(e) => setForm((f) => ({ ...f, moneda: e.target.value }))}
+                  className="mt-1 w-full bg-white border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2"
+                >
+                  <option value="UYU">UYU</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Fecha vencimiento</Label>
+                <Input
+                  type="date"
+                  value={form.fecha_vencimiento}
+                  onChange={(e) => setForm((f) => ({ ...f, fecha_vencimiento: e.target.value }))}
+                  className="mt-1 bg-white border-agro-accent/20 text-agro-text"
+                />
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Descripción</Label>
+                <Input
+                  value={form.descripcion}
+                  onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+                  className="mt-1 bg-white border-agro-accent/20 text-agro-text"
+                  placeholder="Opcional"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white text-sm"
+                disabled={!valid || mutation.isPending}
+                onClick={() => mutation.mutate()}
+              >
+                {mutation.isPending ? "Guardando..." : "Guardar pago"}
+              </Button>
+              <Button
+                variant="outline"
+                className="text-sm border-agro-accent/20 text-agro-muted"
+                onClick={() => { setOpen(false); setForm(EMPTY_FORM); }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+        <PendingTable items={items} tipo="pago" />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -225,23 +515,7 @@ export default function FlujoCajaPage() {
   }
 
   const hayVencidos = data.cobros_vencidos.length > 0 || data.pagos_vencidos.length > 0;
-  const hayPendientes = data.cobros_pendientes.length > 0 || data.pagos_pendientes.length > 0;
-  const hayDatos = hayVencidos || hayPendientes || data.total_por_cobrar > 0 || data.total_por_pagar > 0;
-
-  if (!hayDatos) {
-    return (
-      <div className="p-6 page-fade">
-        <h1 className="text-2xl font-bold text-agro-text mb-2">Flujo de Caja Proyectado</h1>
-        <div className="flex flex-col items-center justify-center py-24 text-center space-y-3">
-          <ArrowLeftRight className="h-12 w-12 text-agro-accent" />
-          <h2 className="text-lg font-semibold text-agro-text">Sin cuentas pendientes</h2>
-          <p className="text-agro-muted max-w-sm text-sm">
-            Agregá cuentas por cobrar en Clientes y cuentas por pagar en Proveedores para ver tu flujo proyectado aquí.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const hayResumen = data.total_por_cobrar > 0 || data.total_por_pagar > 0;
 
   return (
     <div className="p-6 space-y-6 page-fade">
@@ -262,95 +536,75 @@ export default function FlujoCajaPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard
-          title="Por cobrar"
-          value={fmt(data.total_por_cobrar, moneda)}
-          icon={<TrendingUp className="h-5 w-5 text-emerald-400" />}
-          color="text-emerald-600"
-        />
-        <KpiCard
-          title="Por pagar"
-          value={fmt(data.total_por_pagar, moneda)}
-          icon={<TrendingDown className="h-5 w-5 text-red-400" />}
-          color="text-red-600"
-        />
-        <KpiCard
-          title="Balance proyectado"
-          value={fmt(data.balance_proyectado, moneda)}
-          icon={<Wallet className={`h-5 w-5 ${data.balance_proyectado >= 0 ? "text-emerald-400" : "text-red-400"}`} />}
-          color={data.balance_proyectado >= 0 ? "text-emerald-600" : "text-red-600"}
-        />
-      </div>
+      {hayResumen && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <KpiCard
+            title="Por cobrar"
+            value={fmt(data.total_por_cobrar, moneda)}
+            icon={<TrendingUp className="h-5 w-5 text-emerald-400" />}
+            color="text-emerald-600"
+          />
+          <KpiCard
+            title="Por pagar"
+            value={fmt(data.total_por_pagar, moneda)}
+            icon={<TrendingDown className="h-5 w-5 text-red-400" />}
+            color="text-red-600"
+          />
+          <KpiCard
+            title="Balance proyectado"
+            value={fmt(data.balance_proyectado, moneda)}
+            icon={<Wallet className={`h-5 w-5 ${data.balance_proyectado >= 0 ? "text-emerald-400" : "text-red-400"}`} />}
+            color={data.balance_proyectado >= 0 ? "text-emerald-600" : "text-red-600"}
+          />
+        </div>
+      )}
 
       {/* Gráfico semanas */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base text-agro-text">Proyección semanal (13 semanas)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={data.semanas} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis
-                dataKey="semana_label"
-                tick={{ fontSize: 9, fill: "#94a3b8" }}
-                angle={-30}
-                textAnchor="end"
-                height={52}
-              />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={60} tickFormatter={(v) => new Intl.NumberFormat("es-UY", { notation: "compact" }).format(v)} />
-              <Tooltip content={<ChartTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="cobros" name="Cobros" fill="#10b981" opacity={0.85} radius={[3, 3, 0, 0]} />
-              <Bar dataKey="pagos" name="Pagos" fill="#ef4444" opacity={0.85} radius={[3, 3, 0, 0]} />
-              <Line
-                type="monotone"
-                dataKey="balance_acumulado"
-                name="Balance acumulado"
-                stroke="#6366f1"
-                strokeWidth={2}
-                dot={false}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      {hayResumen && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-agro-text">Proyección semanal (13 semanas)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={data.semanas} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="semana_label"
+                  tick={{ fontSize: 9, fill: "#94a3b8" }}
+                  angle={-30}
+                  textAnchor="end"
+                  height={52}
+                />
+                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={60} tickFormatter={(v) => new Intl.NumberFormat("es-UY", { notation: "compact" }).format(v)} />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="cobros" name="Cobros" fill="#10b981" opacity={0.85} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="pagos" name="Pagos" fill="#ef4444" opacity={0.85} radius={[3, 3, 0, 0]} />
+                <Line
+                  type="monotone"
+                  dataKey="balance_acumulado"
+                  name="Balance acumulado"
+                  stroke="#6366f1"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Vencidos */}
       {hayVencidos && (
         <VencidosSection cobrosV={data.cobros_vencidos} pagosV={data.pagos_vencidos} />
       )}
 
-      {/* Cobros pendientes */}
-      {data.cobros_pendientes.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-agro-text flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-              Cobros pendientes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 pb-2">
-            <PendingTable items={data.cobros_pendientes} tipo="cobro" />
-          </CardContent>
-        </Card>
-      )}
+      {/* Cobros a realizar */}
+      <CobrosSection items={data.cobros_pendientes} />
 
-      {/* Pagos pendientes */}
-      {data.pagos_pendientes.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-agro-text flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-red-500" />
-              Pagos pendientes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 pb-2">
-            <PendingTable items={data.pagos_pendientes} tipo="pago" />
-          </CardContent>
-        </Card>
-      )}
+      {/* Pagos a realizar */}
+      <PagosSection items={data.pagos_pendientes} />
     </div>
   );
 }
