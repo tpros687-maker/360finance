@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, BarChart2, Leaf, Plus } from "lucide-react";
+import { TrendingUp, TrendingDown, BarChart2, Leaf, Plus, ChevronDown, ChevronUp } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,11 @@ function fmt(value: number, moneda: string): string {
 function fmtPct(value: number | null): string {
   if (value === null) return "—";
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function fmtNum(value: number | null, decimals = 1, suffix = ""): string {
+  if (value === null) return "—";
+  return `${value.toFixed(decimals)}${suffix}`;
 }
 
 function BalancePill({ value, moneda }: { value: number; moneda: string }) {
@@ -255,12 +260,70 @@ function ModalIngreso({ potrero, onClose }: ModalIngresoProps) {
   );
 }
 
+interface IndicadorRowProps {
+  label: string;
+  value: string;
+  referencia?: string;
+}
+
+function IndicadorRow({ label, value, referencia }: IndicadorRowProps) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[11px] text-agro-muted">{label}</span>
+      <span className="text-sm font-semibold text-agro-text">{value}</span>
+      {referencia && <span className="text-[10px] text-agro-muted/60 mt-0.5">{referencia}</span>}
+    </div>
+  );
+}
+
+function DetailPanel({ row, moneda }: { row: RentabilidadPotrero; moneda: string }) {
+  const hasHa = row.hectareas != null && row.hectareas > 0;
+  const hasIndicadores = hasHa && (row.margen_bruto_ha != null || row.carga_animal_ug_ha != null || row.produccion_kg_ha != null);
+
+  return (
+    <div className="px-4 py-3 bg-agro-bg/60 border-t border-agro-accent/10">
+      <p className="text-xs font-semibold text-agro-muted mb-2 uppercase tracking-wide">Indicadores ganaderos</p>
+      {!hasHa ? (
+        <p className="text-xs text-agro-muted italic">Sin superficie registrada. Ingresá las hectáreas en el Mapa para calcular indicadores.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <IndicadorRow
+            label="CONEAT"
+            value={row.coneat != null ? String(row.coneat) : "—"}
+            referencia="Ref: 100 = promedio país"
+          />
+          <IndicadorRow
+            label="Margen bruto/ha"
+            value={row.margen_bruto_ha != null ? fmt(row.margen_bruto_ha, moneda) + "/ha" : "—"}
+          />
+          <IndicadorRow
+            label="Carga animal"
+            value={fmtNum(row.carga_animal_ug_ha, 2, " UG/ha")}
+            referencia="Ref: 0.5–1.5 UG/ha"
+          />
+          <IndicadorRow
+            label="Producción carne"
+            value={fmtNum(row.produccion_kg_ha, 1, " kg/ha")}
+            referencia="Ref: 80–120 kg/ha"
+          />
+        </div>
+      )}
+      {hasIndicadores && (
+        <p className="text-[10px] text-agro-muted/50 mt-2">
+          Carga animal estimada usando factor 0,8 UG por cabeza.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function RentabilidadPage() {
   const moneda = useAuthStore((s) => s.user?.moneda ?? "UYU");
 
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [modalPotrero, setModalPotrero] = useState<{ id: number; nombre: string } | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const { data = [], isLoading } = useQuery<RentabilidadPotrero[]>({
     queryKey: ["rentabilidad", fechaDesde, fechaHasta],
@@ -277,6 +340,10 @@ export default function RentabilidadPage() {
         balance: parseFloat(String(r.balance)),
         rentabilidad_pct: r.rentabilidad_pct != null ? parseFloat(String(r.rentabilidad_pct)) : null,
         hectareas: r.hectareas != null ? parseFloat(String(r.hectareas)) : null,
+        margen_bruto_ha: r.margen_bruto_ha != null ? parseFloat(String(r.margen_bruto_ha)) : null,
+        carga_animal_ug_ha: r.carga_animal_ug_ha != null ? parseFloat(String(r.carga_animal_ug_ha)) : null,
+        produccion_kg_ha: r.produccion_kg_ha != null ? parseFloat(String(r.produccion_kg_ha)) : null,
+        coneat: r.coneat != null ? parseFloat(String(r.coneat)) : null,
       })),
     placeholderData: (prev) => prev,
   });
@@ -287,6 +354,8 @@ export default function RentabilidadPage() {
   const totalGastos = data.reduce((s, r) => s + r.total_gastos, 0);
   const balanceGlobal = totalIngresos - totalGastos;
   const mejorPotrero = data.length > 0 ? data[0] : null;
+
+  const COLS = 11;
 
   return (
     <div className="p-6 space-y-6 page-fade">
@@ -381,42 +450,78 @@ export default function RentabilidadPage() {
                       <th className="text-right text-agro-muted font-medium px-4 py-3">Gastos</th>
                       <th className="text-right text-agro-muted font-medium px-4 py-3">Balance</th>
                       <th className="text-right text-agro-muted font-medium px-4 py-3">Rentabilidad</th>
+                      <th className="text-right text-agro-muted font-medium px-4 py-3 whitespace-nowrap">MB/ha</th>
+                      <th className="text-right text-agro-muted font-medium px-4 py-3 whitespace-nowrap">UG/ha</th>
+                      <th className="text-right text-agro-muted font-medium px-4 py-3 whitespace-nowrap">Kg/ha</th>
                       <th className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-agro-accent/10">
-                    {data.map((row) => (
-                      <tr key={row.potrero_id} className="hover:bg-agro-bg/40 transition-colors">
-                        <td className="px-4 py-3 font-medium text-agro-text">{row.nombre}</td>
-                        <td className="px-4 py-3 text-right text-agro-muted">
-                          {row.hectareas != null ? `${Number(row.hectareas).toFixed(1)} ha` : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right text-agro-muted">
-                          {row.cantidad_animales > 0 ? row.cantidad_animales : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right text-emerald-600 font-medium">
-                          {fmt(row.total_ingresos, moneda)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-red-600 font-medium">
-                          {fmt(row.total_gastos, moneda)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <BalancePill value={row.balance} moneda={moneda} />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <RentPill value={row.rentabilidad_pct} />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => setModalPotrero({ id: row.potrero_id, nombre: row.nombre })}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors whitespace-nowrap"
+                    {data.map((row) => {
+                      const isExpanded = expandedId === row.potrero_id;
+                      return (
+                        <>
+                          <tr
+                            key={row.potrero_id}
+                            className="hover:bg-agro-bg/40 transition-colors cursor-pointer"
+                            onClick={() => setExpandedId(isExpanded ? null : row.potrero_id)}
                           >
-                            <Plus className="h-3 w-3" />
-                            Ingreso
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                            <td className="px-4 py-3 font-medium text-agro-text">
+                              <span className="flex items-center gap-1.5">
+                                {isExpanded
+                                  ? <ChevronUp className="h-3.5 w-3.5 text-agro-muted shrink-0" />
+                                  : <ChevronDown className="h-3.5 w-3.5 text-agro-muted shrink-0" />
+                                }
+                                {row.nombre}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-agro-muted">
+                              {row.hectareas != null ? `${row.hectareas.toFixed(1)} ha` : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right text-agro-muted">
+                              {row.cantidad_animales > 0 ? row.cantidad_animales : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right text-emerald-600 font-medium">
+                              {fmt(row.total_ingresos, moneda)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-red-600 font-medium">
+                              {fmt(row.total_gastos, moneda)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <BalancePill value={row.balance} moneda={moneda} />
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <RentPill value={row.rentabilidad_pct} />
+                            </td>
+                            <td className="px-4 py-3 text-right text-agro-muted">
+                              {row.margen_bruto_ha != null ? fmt(row.margen_bruto_ha, moneda) : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right text-agro-muted">
+                              {fmtNum(row.carga_animal_ug_ha, 2)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-agro-muted">
+                              {fmtNum(row.produccion_kg_ha, 1)}
+                            </td>
+                            <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => setModalPotrero({ id: row.potrero_id, nombre: row.nombre })}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors whitespace-nowrap"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Ingreso
+                              </button>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr key={`${row.potrero_id}-detail`}>
+                              <td colSpan={COLS} className="p-0">
+                                <DetailPanel row={row} moneda={moneda} />
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-agro-accent/30 bg-agro-bg/50 font-semibold">
@@ -433,6 +538,9 @@ export default function RentabilidadPage() {
                           value={totalGastos > 0 ? ((balanceGlobal / totalGastos) * 100) : null}
                         />
                       </td>
+                      <td className="px-4 py-3" />
+                      <td className="px-4 py-3" />
+                      <td className="px-4 py-3" />
                       <td className="px-4 py-3" />
                     </tr>
                   </tfoot>

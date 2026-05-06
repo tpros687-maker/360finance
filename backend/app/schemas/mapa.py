@@ -198,3 +198,4 @@ class RentabilidadPotrero(BaseModel):
     margen_bruto_ha: Optional[Decimal]
     carga_animal_ug_ha: Optional[Decimal]
     produccion_kg_ha: Optional[Decimal]
+    coneat: Optional[Decimal] = None

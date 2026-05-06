@@ -7,4 +7,8 @@ export interface RentabilidadPotrero {
   balance: number;
   rentabilidad_pct: number | null;
   cantidad_animales: number;
+  margen_bruto_ha: number | null;
+  carga_animal_ug_ha: number | null;
+  produccion_kg_ha: number | null;
+  coneat: number | null;
 }

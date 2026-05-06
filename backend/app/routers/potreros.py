@@ -196,6 +196,7 @@ async def get_rentabilidad(
                 margen_bruto_ha=margen_bruto_ha,
                 carga_animal_ug_ha=carga_animal_ug_ha,
                 produccion_kg_ha=produccion_kg_ha,
+                coneat=row.coneat,
             )
         )
     return out

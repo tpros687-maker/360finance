@@ -40,6 +40,8 @@ export interface Potrero {
   cultivo?: string | null;
   es_primera?: boolean | null;
   fecha_siembra?: string | null;
+  coneat?: number | null;
+  kg_producidos_anio?: number | null;
   created_at: string;
 }
 
@@ -59,6 +61,8 @@ export interface PotreroCreate {
   cultivo?: string | null;
   es_primera?: boolean | null;
   fecha_siembra?: string | null;
+  coneat?: number | null;
+  kg_producidos_anio?: number | null;
 }
 
 export interface PotreroUpdate {
@@ -77,6 +81,8 @@ export interface PotreroUpdate {
   cultivo?: string | null;
   es_primera?: boolean | null;
   fecha_siembra?: string | null;
+  coneat?: number | null;
+  kg_producidos_anio?: number | null;
 }
 
 export interface AplicacionPotrero {

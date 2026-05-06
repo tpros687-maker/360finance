@@ -97,6 +97,8 @@ export function PanelLateral() {
       observaciones: potrero?.observaciones ?? "",
       cultivo: potrero?.cultivo ?? "",
       fecha_siembra: potrero?.fecha_siembra ?? "",
+      coneat: potrero?.coneat ?? undefined,
+      kg_producidos_anio: potrero?.kg_producidos_anio ?? undefined,
     },
   });
 
@@ -115,6 +117,8 @@ export function PanelLateral() {
         observaciones: potrero.observaciones ?? "",
         cultivo: potrero.cultivo ?? "",
         fecha_siembra: potrero.fecha_siembra ?? "",
+        coneat: potrero.coneat ?? undefined,
+        kg_producidos_anio: potrero.kg_producidos_anio ?? undefined,
       });
       setEsPrimera(potrero.es_primera != null ? String(potrero.es_primera) : "");
       setNuevasFilas([]);
@@ -245,6 +249,8 @@ export function PanelLateral() {
               cantidad_franjas: data.tiene_franjas ? data.cantidad_franjas : null,
               franjas_usadas: data.tiene_franjas ? data.franjas_usadas : null,
               dias_por_franja: data.tiene_franjas ? data.dias_por_franja : null,
+              coneat: data.coneat ?? null,
+              kg_producidos_anio: data.kg_producidos_anio ?? null,
             }),
       });
       storePotrero(updated);
@@ -458,6 +464,31 @@ export function PanelLateral() {
                   })()}
                 </>
               )}
+            </div>
+
+            {/* CONEAT y producción */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-agro-muted text-xs">Índice CONEAT</Label>
+                <Input
+                  type="number"
+                  {...register("coneat", { valueAsNumber: true })}
+                  className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
+                  placeholder="Ej: 120"
+                  min={0}
+                  step="0.1"
+                />
+              </div>
+              <div>
+                <Label className="text-agro-muted text-xs">Kg carne/año</Label>
+                <Input
+                  type="number"
+                  {...register("kg_producidos_anio", { valueAsNumber: true })}
+                  className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
+                  placeholder="Ej: 5000"
+                  min={0}
+                />
+              </div>
             </div>
 
             {/* Animales */}
