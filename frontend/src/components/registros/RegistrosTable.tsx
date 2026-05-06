@@ -108,7 +108,7 @@ export function RegistrosTable({ data, isLoading, onEdit }: Props) {
                     key={registro.id}
                     className="border-b border-slate-700/40 hover:bg-slate-800/40 transition-colors group"
                   >
-                    <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
                       {formatFecha(registro.fecha)}
                     </td>
                     <td className="px-4 py-3">
@@ -122,21 +122,21 @@ export function RegistrosTable({ data, isLoading, onEdit }: Props) {
                           className="h-2.5 w-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: registro.categoria.color }}
                         />
-                        <span className="text-slate-200 truncate max-w-[140px]">
+                        <span className="text-gray-700 truncate max-w-[140px]">
                           {registro.categoria.nombre}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
                       {registro.potrero ? (
-                        <span className="text-slate-300 text-xs bg-slate-700/60 rounded px-1.5 py-0.5">
+                        <span className="text-gray-700 text-xs bg-slate-700/60 rounded px-1.5 py-0.5">
                           {registro.potrero.nombre}
                         </span>
                       ) : (
-                        <span className="text-slate-600">—</span>
+                        <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-400 max-w-xs">
+                    <td className="px-4 py-3 text-gray-700 max-w-xs">
                       <span className="truncate block">{registro.descripcion || "—"}</span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-medium whitespace-nowrap">
