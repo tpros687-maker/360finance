@@ -22,8 +22,6 @@ const MapaPage = lazy(() => import("@/pages/MapaPage"));
 const AsistentePage = lazy(() => import("@/pages/AsistentePage"));
 const SSOPage = lazy(() => import("@/pages/SSOPage"));
 const OnboardingPage = lazy(() => import("@/pages/OnboardingPage"));
-const ClientesPage = lazy(() => import("@/pages/ClientesPage"));
-const ProveedoresPage = lazy(() => import("@/pages/ProveedoresPage"));
 const AcercaDePage = lazy(() => import("@/pages/AcercaDePage"));
 const ProductosPage = lazy(() => import("@/pages/ProductosPage"));
 const PagoPage = lazy(() => import("@/pages/PagoPage"));
@@ -64,8 +62,8 @@ function AppRoutes() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/mapa" element={<MapaPage />} />
             <Route path="/registros" element={<RegistrosPage />} />
-            <Route path="/clientes" element={<ClientesPage />} />
-            <Route path="/proveedores" element={<ProveedoresPage />} />
+            <Route path="/clientes" element={<Navigate to="/flujo-caja" replace />} />
+            <Route path="/proveedores" element={<Navigate to="/flujo-caja" replace />} />
             <Route path="/asistente" element={<AsistentePage />} />
             <Route path="/acerca" element={<AcercaDePage />} />
             <Route path="/productos" element={<ProductosPage />} />
