@@ -472,18 +472,13 @@ export function PanelLateral() {
                     key={i}
                     className="grid grid-cols-[1fr_64px_28px_28px] items-center gap-1.5 bg-agro-bg border border-emerald-700/40 rounded-md px-2 py-1.5"
                   >
-                    <select
+                    <input
+                      type="text"
                       value={fila.especie}
                       onChange={(e) => actualizarFila(i, "especie", e.target.value)}
+                      placeholder="Ej: vacas, terneros, novillos..."
                       className="bg-transparent text-agro-text text-xs outline-none w-full"
-                    >
-                      <option value="">Seleccionar...</option>
-                      <option value="bovino">Bovinos</option>
-                      <option value="ovino">Ovinos</option>
-                      <option value="equino">Equinos</option>
-                      <option value="porcino">Porcinos</option>
-                      <option value="otro">Otros</option>
-                    </select>
+                    />
                     <input
                       type="number"
                       value={fila.cantidad}
