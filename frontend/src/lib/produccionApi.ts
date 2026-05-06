@@ -1,64 +1,65 @@
-import { api } from "./axios";
+import { apiFetch } from "./api";
 import type {
-  LoteGanado, LoteCreate, LoteUpdate,
-  EventoReproductivo, EventoCreate,
-  CicloAgricola, CicloCreate, CicloUpdate,
+  CicloAgricola,
+  CicloCreate,
+  CicloUpdate,
+  EventoCreate,
+  EventoReproductivo,
+  LoteCreate,
+  LoteGanado,
+  LoteUpdate,
 } from "@/types/produccion";
 
 // ── Lotes de ganado ───────────────────────────────────────────────────────────
 
-export async function getLotes(potreroId: number): Promise<LoteGanado[]> {
-  const res = await api.get<LoteGanado[]>(`/produccion/potreros/${potreroId}/lotes`);
-  return res.data;
-}
+export const getLotes = (potreroId: number): Promise<LoteGanado[]> =>
+  apiFetch(`/produccion/potreros/${potreroId}/lotes`);
 
-export async function createLote(potreroId: number, data: LoteCreate): Promise<LoteGanado> {
-  const res = await api.post<LoteGanado>(`/produccion/potreros/${potreroId}/lotes`, data);
-  return res.data;
-}
+export const createLote = (potreroId: number, data: LoteCreate): Promise<LoteGanado> =>
+  apiFetch(`/produccion/potreros/${potreroId}/lotes`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
-export async function updateLote(loteId: number, data: LoteUpdate): Promise<LoteGanado> {
-  const res = await api.put<LoteGanado>(`/produccion/lotes/${loteId}`, data);
-  return res.data;
-}
+export const updateLote = (loteId: number, data: LoteUpdate): Promise<LoteGanado> =>
+  apiFetch(`/produccion/lotes/${loteId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 
-export async function deleteLote(loteId: number): Promise<void> {
-  await api.delete(`/produccion/lotes/${loteId}`);
-}
+export const deleteLote = (loteId: number): Promise<void> =>
+  apiFetch(`/produccion/lotes/${loteId}`, { method: "DELETE" });
 
 // ── Eventos reproductivos ─────────────────────────────────────────────────────
 
-export async function getEventos(potreroId: number): Promise<EventoReproductivo[]> {
-  const res = await api.get<EventoReproductivo[]>(`/produccion/potreros/${potreroId}/eventos`);
-  return res.data;
-}
+export const getEventos = (potreroId: number): Promise<EventoReproductivo[]> =>
+  apiFetch(`/produccion/potreros/${potreroId}/eventos`);
 
-export async function createEvento(potreroId: number, data: EventoCreate): Promise<EventoReproductivo> {
-  const res = await api.post<EventoReproductivo>(`/produccion/potreros/${potreroId}/eventos`, data);
-  return res.data;
-}
+export const createEvento = (potreroId: number, data: EventoCreate): Promise<EventoReproductivo> =>
+  apiFetch(`/produccion/potreros/${potreroId}/eventos`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
-export async function deleteEvento(eventoId: number): Promise<void> {
-  await api.delete(`/produccion/eventos/${eventoId}`);
-}
+export const deleteEvento = (eventoId: number): Promise<void> =>
+  apiFetch(`/produccion/eventos/${eventoId}`, { method: "DELETE" });
 
 // ── Ciclos agrícolas ──────────────────────────────────────────────────────────
 
-export async function getCiclos(potreroId: number): Promise<CicloAgricola[]> {
-  const res = await api.get<CicloAgricola[]>(`/produccion/potreros/${potreroId}/ciclos`);
-  return res.data;
-}
+export const getCiclos = (potreroId: number): Promise<CicloAgricola[]> =>
+  apiFetch(`/produccion/potreros/${potreroId}/ciclos`);
 
-export async function createCiclo(potreroId: number, data: CicloCreate): Promise<CicloAgricola> {
-  const res = await api.post<CicloAgricola>(`/produccion/potreros/${potreroId}/ciclos`, data);
-  return res.data;
-}
+export const createCiclo = (potreroId: number, data: CicloCreate): Promise<CicloAgricola> =>
+  apiFetch(`/produccion/potreros/${potreroId}/ciclos`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
-export async function updateCiclo(cicloId: number, data: CicloUpdate): Promise<CicloAgricola> {
-  const res = await api.put<CicloAgricola>(`/produccion/ciclos/${cicloId}`, data);
-  return res.data;
-}
+export const updateCiclo = (cicloId: number, data: CicloUpdate): Promise<CicloAgricola> =>
+  apiFetch(`/produccion/ciclos/${cicloId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 
-export async function deleteCiclo(cicloId: number): Promise<void> {
-  await api.delete(`/produccion/ciclos/${cicloId}`);
-}
+export const deleteCiclo = (cicloId: number): Promise<void> =>
+  apiFetch(`/produccion/ciclos/${cicloId}`, { method: "DELETE" });
