@@ -93,6 +93,7 @@ export function PanelLateral() {
       tiene_franjas: potrero?.tiene_franjas ?? false,
       cantidad_franjas: potrero?.cantidad_franjas ?? undefined,
       franjas_usadas: potrero?.franjas_usadas ?? undefined,
+      dias_por_franja: potrero?.dias_por_franja ?? undefined,
       observaciones: potrero?.observaciones ?? "",
       cultivo: potrero?.cultivo ?? "",
       fecha_siembra: potrero?.fecha_siembra ?? "",
@@ -110,6 +111,7 @@ export function PanelLateral() {
         tiene_franjas: potrero.tiene_franjas,
         cantidad_franjas: potrero.cantidad_franjas ?? undefined,
         franjas_usadas: potrero.franjas_usadas ?? undefined,
+        dias_por_franja: potrero.dias_por_franja ?? undefined,
         observaciones: potrero.observaciones ?? "",
         cultivo: potrero.cultivo ?? "",
         fecha_siembra: potrero.fecha_siembra ?? "",
@@ -127,6 +129,8 @@ export function PanelLateral() {
   const tipoActual = watch("tipo");
   const tieneSuplementacion = watch("tiene_suplementacion");
   const tieneFranjas = watch("tiene_franjas");
+  const diasPorFranja = watch("dias_por_franja");
+  const franjasUsadas = watch("franjas_usadas");
 
   useQuery({
     queryKey: ["animales", selectedPotreroId],
@@ -240,6 +244,7 @@ export function PanelLateral() {
               tiene_franjas: data.tiene_franjas,
               cantidad_franjas: data.tiene_franjas ? data.cantidad_franjas : null,
               franjas_usadas: data.tiene_franjas ? data.franjas_usadas : null,
+              dias_por_franja: data.tiene_franjas ? data.dias_por_franja : null,
             }),
       });
       storePotrero(updated);
@@ -404,28 +409,54 @@ export function PanelLateral() {
                 </Label>
               </div>
               {tieneFranjas && (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-agro-muted text-xs">Total</Label>
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-agro-muted text-xs">Total</Label>
+                      <Input
+                        type="number"
+                        {...register("cantidad_franjas", { valueAsNumber: true })}
+                        className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
+                        placeholder="0"
+                        min={0}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-agro-muted text-xs">Usadas</Label>
+                      <Input
+                        type="number"
+                        {...register("franjas_usadas", { valueAsNumber: true })}
+                        className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
+                        placeholder="0"
+                        min={0}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Label className="text-agro-muted text-xs">Días estimados por franja</Label>
                     <Input
                       type="number"
-                      {...register("cantidad_franjas", { valueAsNumber: true })}
+                      {...register("dias_por_franja", { valueAsNumber: true })}
                       className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
-                      placeholder="0"
-                      min={0}
+                      placeholder="Ej: 7"
+                      min={1}
                     />
                   </div>
-                  <div>
-                    <Label className="text-agro-muted text-xs">Usadas</Label>
-                    <Input
-                      type="number"
-                      {...register("franjas_usadas", { valueAsNumber: true })}
-                      className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
-                      placeholder="0"
-                      min={0}
-                    />
-                  </div>
-                </div>
+                  {diasPorFranja && potrero?.fecha_descanso && (() => {
+                    const restantes = diasPorFranja - diasDescanso(potrero.fecha_descanso!);
+                    return (
+                      <div className="mt-1.5 text-xs bg-agro-bg border border-agro-accent/20 rounded-md px-2.5 py-1.5">
+                        <span className="text-agro-muted">Franja activa: </span>
+                        <span className="text-agro-text font-medium">{franjasUsadas ?? "—"}</span>
+                        <span className="text-agro-muted"> — entra en descanso en </span>
+                        <span className={`font-medium ${restantes <= 2 ? "text-red-400" : "text-emerald-400"}`}>
+                          {restantes}
+                        </span>
+                        <span className="text-agro-muted"> días</span>
+                      </div>
+                    );
+                  })()}
+                </>
               )}
             </div>
 

@@ -33,6 +33,7 @@ export interface Potrero {
   tiene_franjas: boolean;
   cantidad_franjas: number | null;
   franjas_usadas: number | null;
+  dias_por_franja: number | null;
   observaciones: string | null;
   en_descanso: boolean;
   fecha_descanso: string | null;
@@ -53,6 +54,7 @@ export interface PotreroCreate {
   tiene_franjas?: boolean;
   cantidad_franjas?: number;
   franjas_usadas?: number;
+  dias_por_franja?: number | null;
   observaciones?: string;
   cultivo?: string | null;
   es_primera?: boolean | null;
@@ -70,6 +72,7 @@ export interface PotreroUpdate {
   tiene_franjas?: boolean;
   cantidad_franjas?: number | null;
   franjas_usadas?: number | null;
+  dias_por_franja?: number | null;
   observaciones?: string | null;
   cultivo?: string | null;
   es_primera?: boolean | null;

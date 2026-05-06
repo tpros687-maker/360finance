@@ -43,6 +43,7 @@ def _potrero_to_read(p: Potrero) -> PotreroRead:
         tiene_franjas=p.tiene_franjas,
         cantidad_franjas=p.cantidad_franjas,
         franjas_usadas=p.franjas_usadas,
+        dias_por_franja=p.dias_por_franja,
         observaciones=p.observaciones,
         en_descanso=p.en_descanso,
         fecha_descanso=p.fecha_descanso,
@@ -93,6 +94,7 @@ async def create_potrero(
         tiene_franjas=payload.tiene_franjas,
         cantidad_franjas=payload.cantidad_franjas,
         franjas_usadas=payload.franjas_usadas,
+        dias_por_franja=payload.dias_por_franja,
         observaciones=payload.observaciones,
     )
     db.add(potrero)
@@ -206,6 +208,8 @@ async def update_potrero(
         potrero.cantidad_franjas = payload.cantidad_franjas
     if payload.franjas_usadas is not None:
         potrero.franjas_usadas = payload.franjas_usadas
+    if payload.dias_por_franja is not None:
+        potrero.dias_por_franja = payload.dias_por_franja
     if payload.observaciones is not None:
         potrero.observaciones = payload.observaciones
     if payload.cultivo is not None:

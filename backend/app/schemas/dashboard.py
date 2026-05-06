@@ -33,6 +33,7 @@ class RecomendacionIA(BaseModel):
 # ── Alertas ───────────────────────────────────────────────────────────────────
 
 class AlertaItem(BaseModel):
+    id: str
     tipo: str
     nivel: str  # "danger" | "warning" | "info"
     titulo: str

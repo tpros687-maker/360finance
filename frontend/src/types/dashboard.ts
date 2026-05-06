@@ -26,6 +26,7 @@ export interface RecomendacionIA {
 }
 
 export interface AlertaItem {
+  id: string;
   tipo: string;
   nivel: "warning" | "danger" | "info";
   titulo: string;

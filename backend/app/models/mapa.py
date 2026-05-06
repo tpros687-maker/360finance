@@ -75,6 +75,7 @@ class Potrero(Base):
     tiene_franjas: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cantidad_franjas: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     franjas_usadas: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    dias_por_franja: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     observaciones: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     hectareas: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     en_descanso: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

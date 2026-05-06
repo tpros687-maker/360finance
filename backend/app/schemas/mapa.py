@@ -27,6 +27,7 @@ class PotreroCreate(BaseModel):
     tiene_franjas: bool = False
     cantidad_franjas: Optional[int] = None
     franjas_usadas: Optional[int] = None
+    dias_por_franja: Optional[int] = None
     observaciones: Optional[str] = None
     cultivo: Optional[str] = None
     es_primera: Optional[bool] = None
@@ -44,6 +45,7 @@ class PotreroUpdate(BaseModel):
     tiene_franjas: Optional[bool] = None
     cantidad_franjas: Optional[int] = None
     franjas_usadas: Optional[int] = None
+    dias_por_franja: Optional[int] = None
     observaciones: Optional[str] = None
     cultivo: Optional[str] = None
     es_primera: Optional[bool] = None
@@ -63,6 +65,7 @@ class PotreroRead(BaseModel):
     tiene_franjas: bool
     cantidad_franjas: Optional[int]
     franjas_usadas: Optional[int]
+    dias_por_franja: Optional[int]
     observaciones: Optional[str]
     en_descanso: bool
     fecha_descanso: Optional[date]

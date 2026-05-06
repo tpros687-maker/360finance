@@ -1,11 +1,27 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, BarChart2, Leaf } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TrendingUp, TrendingDown, BarChart2, Leaf, Plus } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getRentabilidadPotreros } from "@/lib/potrerosApi";
+import { getCategorias, createCategoria } from "@/lib/categoriasApi";
+import { createRegistro } from "@/lib/registrosApi";
 import { useAuthStore } from "@/store/authStore";
+import { toast } from "@/hooks/useToast";
 import type { RentabilidadPotrero } from "@/types/potreros";
+
+const todayStr = () => new Date().toISOString().split("T")[0];
+
+const VENTA_NOMBRE = "Venta de producción";
 
 function fmt(value: number, moneda: string): string {
   return new Intl.NumberFormat("es-UY", {
@@ -38,9 +54,7 @@ function RentPill({ value }: { value: number | null }) {
   if (value === null) return <span className="text-agro-muted text-sm">—</span>;
   const positive = value >= 0;
   return (
-    <span
-      className={`text-sm font-semibold ${positive ? "text-emerald-600" : "text-red-600"}`}
-    >
+    <span className={`text-sm font-semibold ${positive ? "text-emerald-600" : "text-red-600"}`}>
       {fmtPct(value)}
     </span>
   );
@@ -101,11 +115,152 @@ function PageSkeleton() {
   );
 }
 
+interface IngresoForm {
+  monto: string;
+  moneda: string;
+  fecha: string;
+  descripcion: string;
+}
+
+interface ModalIngresoProps {
+  potrero: { id: number; nombre: string } | null;
+  onClose: () => void;
+}
+
+function ModalIngreso({ potrero, onClose }: ModalIngresoProps) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState<IngresoForm>({
+    monto: "",
+    moneda: "UYU",
+    fecha: todayStr(),
+    descripcion: "",
+  });
+
+  const { data: categorias = [] } = useQuery({
+    queryKey: ["categorias"],
+    queryFn: getCategorias,
+    staleTime: 60000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!potrero) return;
+
+      let cat = categorias.find(
+        (c) => c.nombre === VENTA_NOMBRE && c.tipo === "ingreso"
+      );
+      if (!cat) {
+        cat = await createCategoria({
+          nombre: VENTA_NOMBRE,
+          tipo: "ingreso",
+          color: "#22c55e",
+        });
+        qc.invalidateQueries({ queryKey: ["categorias"] });
+      }
+
+      await createRegistro({
+        tipo: "ingreso",
+        categoria_id: cat.id,
+        potrero_id: potrero.id,
+        monto: parseFloat(form.monto),
+        moneda: form.moneda,
+        fecha: form.fecha,
+        descripcion: form.descripcion.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rentabilidad"] });
+      qc.invalidateQueries({ queryKey: ["registros"] });
+      qc.invalidateQueries({ queryKey: ["resumen"] });
+      toast({ title: "Ingreso registrado" });
+      onClose();
+    },
+    onError: () => toast({ title: "Error al registrar ingreso", variant: "destructive" }),
+  });
+
+  const valid = parseFloat(form.monto) > 0 && !!form.fecha;
+
+  return (
+    <Dialog open={!!potrero} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-agro-text">
+            Registrar ingreso — {potrero?.nombre}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-1">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 sm:col-span-1">
+              <Label className="text-agro-muted text-xs">Monto *</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.monto}
+                onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}
+                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text"
+                placeholder="0.00"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="text-agro-muted text-xs">Moneda</Label>
+              <select
+                value={form.moneda}
+                onChange={(e) => setForm((f) => ({ ...f, moneda: e.target.value }))}
+                className="mt-1 w-full bg-agro-bg border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2"
+              >
+                <option value="UYU">UYU</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-agro-muted text-xs">Fecha *</Label>
+            <Input
+              type="date"
+              value={form.fecha}
+              onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))}
+              className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text"
+            />
+          </div>
+
+          <div>
+            <Label className="text-agro-muted text-xs">Descripción</Label>
+            <Input
+              value={form.descripcion}
+              onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+              className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text"
+              placeholder="Opcional"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={!valid || mutation.isPending}
+              onClick={() => mutation.mutate()}
+            >
+              {mutation.isPending ? "Guardando..." : "Guardar ingreso"}
+            </Button>
+            <Button variant="outline" onClick={onClose} className="border-agro-accent/20 text-agro-muted">
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function RentabilidadPage() {
   const moneda = useAuthStore((s) => s.user?.moneda ?? "UYU");
 
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [modalPotrero, setModalPotrero] = useState<{ id: number; nombre: string } | null>(null);
 
   const { data = [], isLoading } = useQuery<RentabilidadPotrero[]>({
     queryKey: ["rentabilidad", fechaDesde, fechaHasta],
@@ -226,6 +381,7 @@ export default function RentabilidadPage() {
                       <th className="text-right text-agro-muted font-medium px-4 py-3">Gastos</th>
                       <th className="text-right text-agro-muted font-medium px-4 py-3">Balance</th>
                       <th className="text-right text-agro-muted font-medium px-4 py-3">Rentabilidad</th>
+                      <th className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-agro-accent/10">
@@ -250,6 +406,15 @@ export default function RentabilidadPage() {
                         <td className="px-4 py-3 text-right">
                           <RentPill value={row.rentabilidad_pct} />
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => setModalPotrero({ id: row.potrero_id, nombre: row.nombre })}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors whitespace-nowrap"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Ingreso
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -268,6 +433,7 @@ export default function RentabilidadPage() {
                           value={totalGastos > 0 ? ((balanceGlobal / totalGastos) * 100) : null}
                         />
                       </td>
+                      <td className="px-4 py-3" />
                     </tr>
                   </tfoot>
                 </table>
@@ -276,6 +442,11 @@ export default function RentabilidadPage() {
           </Card>
         </>
       )}
+
+      <ModalIngreso
+        potrero={modalPotrero}
+        onClose={() => setModalPotrero(null)}
+      />
     </div>
   );
 }

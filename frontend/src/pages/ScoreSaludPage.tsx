@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Droplets, Banknote, Sprout, TrendingDown } from "lucide-react";
+import { Activity, Droplets, Banknote, Sprout, TrendingDown, Info } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getScoreSalud } from "@/lib/dashboardApi";
@@ -20,6 +21,13 @@ const INDICADOR_ICONS = {
   productividad: Sprout,
   costos:        TrendingDown,
 } as const;
+
+const INDICADOR_TOOLTIPS: Record<keyof typeof INDICADOR_ICONS, string> = {
+  liquidez:      "Basado en el balance ingresos vs gastos del último año. 25pts si positivo, 12pts si negativo hasta -20%, 0pts si peor.",
+  deuda:         "Basado en cuentas por pagar vencidas. 25pts si ninguna vencida, 12pts si vencidas < 30% del total, 0pts si >= 30%.",
+  productividad: "Basado en potreros con animales que tienen ingresos en los últimos 90 días. Se restan 5pts por cada potrero sin ingresos.",
+  costos:        "Basado en gastos del mes actual vs promedio de los últimos 3 meses. 25pts si normal, 12pts si hasta 30% mayor, 0pts si más de 30% mayor.",
+};
 
 // ── SVG circle progress ───────────────────────────────────────────────────────
 
@@ -59,9 +67,12 @@ function IndicadorCard({
   data: IndicadorSalud;
 }) {
   const Icon = INDICADOR_ICONS[name];
+  const tooltip = INDICADOR_TOOLTIPS[name];
   const pct = (data.pts / data.max) * 100;
   const barColor =
     pct === 100 ? "bg-emerald-500" : pct >= 48 ? "bg-amber-500" : "bg-red-500";
+
+  const [open, setOpen] = useState(false);
 
   return (
     <Card>
@@ -69,7 +80,21 @@ function IndicadorCard({
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-agro-primary/10">
           <Icon className="h-4 w-4 text-agro-primary" />
         </div>
-        <CardTitle className="text-sm font-medium text-agro-muted">{data.label}</CardTitle>
+        <CardTitle className="text-sm font-medium text-agro-muted flex-1">{data.label}</CardTitle>
+        <div
+          className="relative flex-shrink-0"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <Info className="h-3.5 w-3.5 text-agro-muted/50 hover:text-agro-muted cursor-help transition-colors" />
+          {open && (
+            <div className="absolute bottom-full right-0 mb-2 w-60 rounded-md bg-slate-800 text-white text-xs leading-relaxed p-2.5 z-50 shadow-lg pointer-events-none">
+              {tooltip}
+              <div className="absolute top-full right-2 border-[5px] border-transparent border-t-slate-800" />
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="flex items-baseline justify-between">

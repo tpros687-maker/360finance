@@ -344,16 +344,17 @@ async def get_alertas(
     # ── 1. DESCANSO_EXCESIVO ──────────────────────────────────────────────────
     cutoff_descanso = today - timedelta(days=45)
     descanso_q = await db.execute(
-        select(Potrero.nombre, Potrero.fecha_descanso).where(
+        select(Potrero.id, Potrero.nombre, Potrero.fecha_descanso).where(
             Potrero.user_id == uid,
             Potrero.en_descanso == True,  # noqa: E712
             Potrero.fecha_descanso.isnot(None),
             Potrero.fecha_descanso <= cutoff_descanso,
         )
     )
-    for nombre, fecha_d in descanso_q.all():
+    for potrero_id, nombre, fecha_d in descanso_q.all():
         dias = (today - fecha_d).days
         alertas.append(AlertaItem(
+            id=f"DESCANSO_EXCESIVO_{potrero_id}",
             tipo="DESCANSO_EXCESIVO",
             nivel="warning",
             titulo=f"Potrero «{nombre}» lleva {dias} días en descanso",
@@ -363,6 +364,7 @@ async def get_alertas(
     # ── 2. CLIENTE_DEUDA_VENCIDA ──────────────────────────────────────────────
     deuda_cli_q = await db.execute(
         select(
+            Cliente.id,
             Cliente.nombre,
             func.sum(CuentaCobrar.monto).label("total"),
             func.count(CuentaCobrar.id).label("cnt"),
@@ -375,9 +377,10 @@ async def get_alertas(
         )
         .group_by(Cliente.id, Cliente.nombre)
     )
-    for nombre, total, cnt in deuda_cli_q.all():
+    for cliente_id, nombre, total, cnt in deuda_cli_q.all():
         s = "s" if cnt > 1 else ""
         alertas.append(AlertaItem(
+            id=f"CLIENTE_DEUDA_VENCIDA_{cliente_id}",
             tipo="CLIENTE_DEUDA_VENCIDA",
             nivel="danger",
             titulo=f"Deuda vencida de {nombre}",
@@ -387,6 +390,7 @@ async def get_alertas(
     # ── 3. PAGO_VENCIDO ───────────────────────────────────────────────────────
     pagos_v_q = await db.execute(
         select(
+            Proveedor.id,
             Proveedor.nombre,
             func.sum(CuentaPagar.monto).label("total"),
             func.count(CuentaPagar.id).label("cnt"),
@@ -399,9 +403,10 @@ async def get_alertas(
         )
         .group_by(Proveedor.id, Proveedor.nombre)
     )
-    for nombre, total, cnt in pagos_v_q.all():
+    for proveedor_id, nombre, total, cnt in pagos_v_q.all():
         s = "s" if cnt > 1 else ""
         alertas.append(AlertaItem(
+            id=f"PAGO_VENCIDO_{proveedor_id}",
             tipo="PAGO_VENCIDO",
             nivel="danger",
             titulo=f"Pago vencido a {nombre}",
@@ -440,6 +445,7 @@ async def get_alertas(
         if avg_prev > 0 and gasto_mes > avg_prev * 1.30:
             pct = (gasto_mes / avg_prev - 1) * 100
             alertas.append(AlertaItem(
+                id=f"GASTO_ELEVADO_{today.strftime('%Y-%m')}",
                 tipo="GASTO_ELEVADO",
                 nivel="warning",
                 titulo="Gasto mensual elevado",
@@ -470,18 +476,66 @@ async def get_alertas(
     sin_ingr = anim_ids - ingr_ids
     if sin_ingr:
         sin_q = await db.execute(
-            select(Potrero.nombre).where(
+            select(Potrero.id, Potrero.nombre).where(
                 Potrero.user_id == uid,
                 Potrero.id.in_(sin_ingr),
             ).order_by(Potrero.nombre)
         )
-        for (nombre,) in sin_q.all():
+        for potrero_id, nombre in sin_q.all():
             alertas.append(AlertaItem(
+                id=f"POTRERO_SIN_INGRESOS_{potrero_id}",
                 tipo="POTRERO_SIN_INGRESOS",
                 nivel="info",
                 titulo=f"Sin ingresos recientes en «{nombre}»",
                 detalle="Este potrero tiene animales pero no registra ingresos en los últimos 90 días.",
             ))
+
+    # ── 6. VENCIMIENTO_PROXIMO ────────────────────────────────────────────────
+    next_7 = today + timedelta(days=7)
+
+    venc_cobrar_q = await db.execute(
+        select(CuentaCobrar.id, CuentaCobrar.monto, CuentaCobrar.fecha_vencimiento, Cliente.nombre)
+        .join(Cliente, CuentaCobrar.cliente_id == Cliente.id)
+        .where(
+            CuentaCobrar.user_id == uid,
+            CuentaCobrar.pagado == False,  # noqa: E712
+            CuentaCobrar.fecha_vencimiento.isnot(None),
+            CuentaCobrar.fecha_vencimiento >= today,
+            CuentaCobrar.fecha_vencimiento <= next_7,
+        )
+        .order_by(CuentaCobrar.fecha_vencimiento)
+    )
+    for cc_id, monto, fv, cliente_nombre in venc_cobrar_q.all():
+        dias = (fv.date() - today).days
+        alertas.append(AlertaItem(
+            id=f"VENCIMIENTO_PROXIMO_cobrar_{cc_id}",
+            tipo="VENCIMIENTO_PROXIMO",
+            nivel="warning",
+            titulo=f"Cobro próximo a vencer: {cliente_nombre}",
+            detalle=f"Vence en {dias} día{'s' if dias != 1 else ''} — {float(monto):,.0f}.",
+        ))
+
+    venc_pagar_q = await db.execute(
+        select(CuentaPagar.id, CuentaPagar.monto, CuentaPagar.fecha_vencimiento, Proveedor.nombre)
+        .join(Proveedor, CuentaPagar.proveedor_id == Proveedor.id)
+        .where(
+            CuentaPagar.user_id == uid,
+            CuentaPagar.pagado == False,  # noqa: E712
+            CuentaPagar.fecha_vencimiento.isnot(None),
+            CuentaPagar.fecha_vencimiento >= today,
+            CuentaPagar.fecha_vencimiento <= next_7,
+        )
+        .order_by(CuentaPagar.fecha_vencimiento)
+    )
+    for cp_id, monto, fv, proveedor_nombre in venc_pagar_q.all():
+        dias = (fv.date() - today).days
+        alertas.append(AlertaItem(
+            id=f"VENCIMIENTO_PROXIMO_pagar_{cp_id}",
+            tipo="VENCIMIENTO_PROXIMO",
+            nivel="warning",
+            titulo=f"Pago próximo a vencer: {proveedor_nombre}",
+            detalle=f"Vence en {dias} día{'s' if dias != 1 else ''} — {float(monto):,.0f}.",
+        ))
 
     # ── Ordenar: danger → warning → info ─────────────────────────────────────
     alertas.sort(key=lambda a: _NIVEL_ORDER[a.nivel])
