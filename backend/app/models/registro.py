@@ -32,6 +32,9 @@ class Registro(Base):
     fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     descripcion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     comprobante_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    tipo_imputacion: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    actividad_tipo: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    actividad_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
