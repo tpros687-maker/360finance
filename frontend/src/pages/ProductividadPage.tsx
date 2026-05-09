@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Leaf } from "lucide-react";
+import { Plus, Trash2, Leaf, ArrowRightLeft, Scissors, ShoppingCart } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,19 +9,19 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getPotreros } from "@/lib/potrerosApi";
 import {
-  getLotes, createLote, updateLote, deleteLote,
   getEventos, createEvento, deleteEvento,
   getCiclos, createCiclo, deleteCiclo,
 } from "@/lib/produccionApi";
+import { getLotes, createLote, moverLote, dividirLote, venderLote } from "@/lib/lotesApi";
 import { toast } from "@/hooks/useToast";
 import type { Potrero } from "@/types/mapa";
-import type {
-  LoteGanado, LoteCreate,
-  EventoCreate,
-  CicloCreate,
-} from "@/types/produccion";
+import type { EventoCreate, CicloCreate } from "@/types/produccion";
+import type { Lote } from "@/types/lotes";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
+
+const CATEGORIAS = ["novillo", "vaquillona", "ternero", "ternera", "vaca", "toro", "otro"] as const;
+const MOTIVOS_DIVISION = ["destete", "punta", "sexo", "inseminacion", "otro"] as const;
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -59,40 +59,42 @@ function fmtCurrency(n: number, moneda: string) {
   }).format(n);
 }
 
+const SELECT_CLS = "mt-1 w-full bg-agro-bg border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2";
+const INPUT_CLS  = "mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm";
+
 // ── Modal: Nuevo lote ─────────────────────────────────────────────────────────
 
 function ModalNuevoLote({ potreroId, open, onClose }: { potreroId: number; open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
-    especie: "", cantidad: "", fecha_entrada: todayStr(),
-    peso_entrada_kg: "", fecha_salida: "", peso_salida_kg: "",
+    categoria: "novillo" as typeof CATEGORIAS[number],
+    cantidad: "",
+    fecha_entrada: todayStr(),
+    peso_total_entrada_kg: "",
+    precio_kg_compra: "",
   });
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const mutation = useMutation({
-    mutationFn: () => {
-      const data: LoteCreate = {
-        potrero_id: potreroId,
-        especie: form.especie,
-        cantidad: parseInt(form.cantidad),
-        fecha_entrada: form.fecha_entrada,
-        peso_entrada_kg: parseFloat(form.peso_entrada_kg),
-        ...(form.fecha_salida && { fecha_salida: form.fecha_salida }),
-        ...(form.peso_salida_kg && { peso_salida_kg: parseFloat(form.peso_salida_kg) }),
-      };
-      return createLote(potreroId, data);
-    },
+  const mut = useMutation({
+    mutationFn: () => createLote({
+      potrero_id: potreroId,
+      categoria: form.categoria,
+      cantidad: parseInt(form.cantidad),
+      fecha_entrada: form.fecha_entrada,
+      peso_total_entrada_kg: parseFloat(form.peso_total_entrada_kg),
+      ...(form.precio_kg_compra ? { precio_kg_compra: parseFloat(form.precio_kg_compra) } : {}),
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lotes", potreroId] });
       toast({ title: "Lote registrado" });
       onClose();
-      setForm({ especie: "", cantidad: "", fecha_entrada: todayStr(), peso_entrada_kg: "", fecha_salida: "", peso_salida_kg: "" });
+      setForm({ categoria: "novillo", cantidad: "", fecha_entrada: todayStr(), peso_total_entrada_kg: "", precio_kg_compra: "" });
     },
     onError: () => toast({ title: "Error al registrar lote", variant: "destructive" }),
   });
 
-  const valid = form.especie && form.cantidad && form.fecha_entrada && form.peso_entrada_kg;
+  const valid = form.cantidad && form.fecha_entrada && form.peso_total_entrada_kg;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -100,46 +102,36 @@ function ModalNuevoLote({ potreroId, open, onClose }: { potreroId: number; open:
         <DialogHeader><DialogTitle className="text-agro-text">Nuevo lote de ganado</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-1">
           <div>
-            <Label className="text-agro-muted text-xs">Especie *</Label>
-            <Input value={form.especie} onChange={set("especie")} autoFocus
-              className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="Novillos, vaquillonas..." />
+            <Label className="text-agro-muted text-xs">Categoría *</Label>
+            <select value={form.categoria} onChange={set("categoria")} className={SELECT_CLS}>
+              {CATEGORIAS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-agro-muted text-xs">Cantidad *</Label>
+              <Label className="text-agro-muted text-xs">Cantidad (cab.) *</Label>
               <Input type="number" min={1} value={form.cantidad} onChange={set("cantidad")}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="0" />
+                className={INPUT_CLS} placeholder="0" autoFocus />
             </div>
             <div>
               <Label className="text-agro-muted text-xs">Fecha entrada *</Label>
-              <Input type="date" value={form.fecha_entrada} onChange={set("fecha_entrada")}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" />
+              <Input type="date" value={form.fecha_entrada} onChange={set("fecha_entrada")} className={INPUT_CLS} />
             </div>
           </div>
           <div>
             <Label className="text-agro-muted text-xs">Peso total entrada (kg) *</Label>
-            <Input type="number" min={0} step="0.1" value={form.peso_entrada_kg} onChange={set("peso_entrada_kg")}
-              className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="Peso total del lote en kg" />
+            <Input type="number" min={0} step="0.1" value={form.peso_total_entrada_kg} onChange={set("peso_total_entrada_kg")}
+              className={INPUT_CLS} placeholder="Peso total del lote en kg" />
           </div>
-          <div className="border-t border-agro-accent/20 pt-3">
-            <p className="text-xs text-agro-muted mb-2">Salida (opcional)</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-agro-muted text-xs">Fecha salida</Label>
-                <Input type="date" value={form.fecha_salida} onChange={set("fecha_salida")}
-                  className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" />
-              </div>
-              <div>
-                <Label className="text-agro-muted text-xs">Peso salida (kg)</Label>
-                <Input type="number" min={0} step="0.1" value={form.peso_salida_kg} onChange={set("peso_salida_kg")}
-                  className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="0" />
-              </div>
-            </div>
+          <div>
+            <Label className="text-agro-muted text-xs">Precio / kg compra (USD, opcional)</Label>
+            <Input type="number" min={0} step="0.01" value={form.precio_kg_compra} onChange={set("precio_kg_compra")}
+              className={INPUT_CLS} placeholder="Ej: 1.80" />
           </div>
           <div className="flex gap-2 pt-1">
             <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={!valid || mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? "Guardando..." : "Guardar"}
+              disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+              {mut.isPending ? "Guardando..." : "Guardar"}
             </Button>
             <Button variant="outline" onClick={onClose} className="border-agro-accent/20 text-agro-muted">Cancelar</Button>
           </div>
@@ -149,52 +141,263 @@ function ModalNuevoLote({ potreroId, open, onClose }: { potreroId: number; open:
   );
 }
 
-// ── Modal: Registrar salida ───────────────────────────────────────────────────
+// ── Modal: Mover lote ─────────────────────────────────────────────────────────
 
-function ModalSalida({ lote, onClose }: { lote: LoteGanado | null; onClose: () => void }) {
+function ModalMoverLote({ lote, potreros, onClose }: { lote: Lote | null; potreros: Potrero[]; onClose: () => void }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ fecha_salida: todayStr(), peso_salida_kg: "" });
+  const [form, setForm] = useState({ potrero_destino_id: "", fecha: todayStr(), notas: "" });
 
-  const mutation = useMutation({
-    mutationFn: () => updateLote(lote!.id, {
-      fecha_salida: form.fecha_salida,
-      peso_salida_kg: parseFloat(form.peso_salida_kg),
+  const opciones = potreros.filter(p => p.id !== lote?.potrero_id);
+
+  const mut = useMutation({
+    mutationFn: () => moverLote(lote!.id, {
+      potrero_destino_id: parseInt(form.potrero_destino_id),
+      fecha: form.fecha,
+      ...(form.notas ? { notas: form.notas } : {}),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lotes", lote!.potrero_id] });
-      toast({ title: "Salida registrada" });
+      qc.invalidateQueries({ queryKey: ["lotes", parseInt(form.potrero_destino_id)] });
+      toast({ title: "Lote movido" });
       onClose();
-      setForm({ fecha_salida: todayStr(), peso_salida_kg: "" });
+      setForm({ potrero_destino_id: "", fecha: todayStr(), notas: "" });
     },
-    onError: () => toast({ title: "Error al registrar salida", variant: "destructive" }),
+    onError: () => toast({ title: "Error al mover lote", variant: "destructive" }),
   });
+
+  const valid = form.potrero_destino_id && form.fecha;
 
   return (
     <Dialog open={!!lote} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-xs">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-agro-text text-sm">
-            Registrar salida — {lote?.especie}
+            Mover lote — {lote?.categoria} · {lote?.cantidad} cab.
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 pt-1">
           <div>
-            <Label className="text-agro-muted text-xs">Fecha salida *</Label>
-            <Input type="date" value={form.fecha_salida}
-              onChange={(e) => setForm(f => ({ ...f, fecha_salida: e.target.value }))}
-              className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" />
+            <Label className="text-agro-muted text-xs">Potrero destino *</Label>
+            <select value={form.potrero_destino_id}
+              onChange={(e) => setForm(f => ({ ...f, potrero_destino_id: e.target.value }))}
+              className={SELECT_CLS}>
+              <option value="">Seleccioná un potrero...</option>
+              {opciones.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
           </div>
           <div>
-            <Label className="text-agro-muted text-xs">Peso total salida (kg) *</Label>
-            <Input type="number" min={0} step="0.1" value={form.peso_salida_kg} autoFocus
-              onChange={(e) => setForm(f => ({ ...f, peso_salida_kg: e.target.value }))}
-              className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="Peso total del lote en kg" />
+            <Label className="text-agro-muted text-xs">Fecha *</Label>
+            <Input type="date" value={form.fecha}
+              onChange={(e) => setForm(f => ({ ...f, fecha: e.target.value }))} className={INPUT_CLS} />
           </div>
-          <div className="flex gap-2">
+          <div>
+            <Label className="text-agro-muted text-xs">Notas</Label>
+            <Input value={form.notas} onChange={(e) => setForm(f => ({ ...f, notas: e.target.value }))}
+              className={INPUT_CLS} placeholder="Opcional..." />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+              {mut.isPending ? "Moviendo..." : "Confirmar"}
+            </Button>
+            <Button variant="outline" onClick={onClose} className="border-agro-accent/20 text-agro-muted">Cancelar</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Modal: Dividir lote ───────────────────────────────────────────────────────
+
+function ModalDividirLote({ lote, potreros, onClose }: { lote: Lote | null; potreros: Potrero[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    cantidad_separada: "",
+    potrero_destino_id: "",
+    fecha: todayStr(),
+    motivo: "" as string,
+    notas_hijo: "",
+  });
+
+  const maxCantidad = (lote?.cantidad ?? 2) - 1;
+
+  const mut = useMutation({
+    mutationFn: () => dividirLote(lote!.id, {
+      cantidad_separada: parseInt(form.cantidad_separada),
+      potrero_destino_id: parseInt(form.potrero_destino_id),
+      fecha: form.fecha,
+      ...(form.motivo ? { motivo: form.motivo } : {}),
+      ...(form.notas_hijo ? { notas_hijo: form.notas_hijo } : {}),
+    }),
+    onSuccess: (hijo) => {
+      qc.invalidateQueries({ queryKey: ["lotes", lote!.potrero_id] });
+      qc.invalidateQueries({ queryKey: ["lotes", hijo.potrero_id] });
+      toast({ title: `Lote dividido — lote hijo #${hijo.id} creado` });
+      onClose();
+      setForm({ cantidad_separada: "", potrero_destino_id: "", fecha: todayStr(), motivo: "", notas_hijo: "" });
+    },
+    onError: () => toast({ title: "Error al dividir lote", variant: "destructive" }),
+  });
+
+  const cantNum = parseInt(form.cantidad_separada);
+  const valid = form.potrero_destino_id && form.fecha &&
+    !isNaN(cantNum) && cantNum >= 1 && cantNum <= maxCantidad;
+
+  return (
+    <Dialog open={!!lote} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-agro-text text-sm">
+            Dividir lote — {lote?.categoria} · {lote?.cantidad} cab.
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-agro-muted text-xs">Cantidad a separar * (máx {maxCantidad})</Label>
+              <Input type="number" min={1} max={maxCantidad} value={form.cantidad_separada} autoFocus
+                onChange={(e) => setForm(f => ({ ...f, cantidad_separada: e.target.value }))}
+                className={INPUT_CLS} placeholder="0" />
+            </div>
+            <div>
+              <Label className="text-agro-muted text-xs">Fecha *</Label>
+              <Input type="date" value={form.fecha}
+                onChange={(e) => setForm(f => ({ ...f, fecha: e.target.value }))} className={INPUT_CLS} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-agro-muted text-xs">Potrero destino del hijo *</Label>
+            <select value={form.potrero_destino_id}
+              onChange={(e) => setForm(f => ({ ...f, potrero_destino_id: e.target.value }))}
+              className={SELECT_CLS}>
+              <option value="">Seleccioná un potrero...</option>
+              {potreros.map(p => <option key={p.id} value={p.id}>{p.nombre}{p.id === lote?.potrero_id ? " (actual)" : ""}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label className="text-agro-muted text-xs">Motivo</Label>
+            <select value={form.motivo}
+              onChange={(e) => setForm(f => ({ ...f, motivo: e.target.value }))}
+              className={SELECT_CLS}>
+              <option value="">Sin especificar</option>
+              {MOTIVOS_DIVISION.map(m => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label className="text-agro-muted text-xs">Notas del lote hijo</Label>
+            <Input value={form.notas_hijo}
+              onChange={(e) => setForm(f => ({ ...f, notas_hijo: e.target.value }))}
+              className={INPUT_CLS} placeholder="Opcional..." />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+              {mut.isPending ? "Dividiendo..." : "Confirmar"}
+            </Button>
+            <Button variant="outline" onClick={onClose} className="border-agro-accent/20 text-agro-muted">Cancelar</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Modal: Vender lote ────────────────────────────────────────────────────────
+
+function ModalVenderLote({ lote, onClose }: { lote: Lote | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    fecha: todayStr(),
+    cantidad_vendida: "",
+    peso_total_kg: "",
+    precio_kg: "",
+    moneda: "USD",
+    notas: "",
+  });
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const maxCantidad = lote?.cantidad ?? 1;
+  const cantNum = parseInt(form.cantidad_vendida);
+  const totalEstimado = !isNaN(cantNum) && form.peso_total_kg && form.precio_kg
+    ? (parseFloat(form.peso_total_kg) * parseFloat(form.precio_kg)).toFixed(2)
+    : null;
+
+  const mut = useMutation({
+    mutationFn: () => venderLote(lote!.id, {
+      fecha: form.fecha,
+      cantidad_vendida: cantNum,
+      peso_total_kg: parseFloat(form.peso_total_kg),
+      precio_kg: parseFloat(form.precio_kg),
+      moneda: form.moneda,
+      ...(form.notas ? { notas: form.notas } : {}),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lotes", lote!.potrero_id] });
+      const cerrado = cantNum === maxCantidad;
+      toast({ title: cerrado ? "Venta registrada — lote cerrado" : "Venta registrada" });
+      onClose();
+      setForm({ fecha: todayStr(), cantidad_vendida: "", peso_total_kg: "", precio_kg: "", moneda: "USD", notas: "" });
+    },
+    onError: () => toast({ title: "Error al registrar venta", variant: "destructive" }),
+  });
+
+  const valid = form.fecha && form.peso_total_kg && form.precio_kg &&
+    !isNaN(cantNum) && cantNum >= 1 && cantNum <= maxCantidad;
+
+  return (
+    <Dialog open={!!lote} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-agro-text text-sm">
+            Registrar venta — {lote?.categoria} · {lote?.cantidad} cab.
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-agro-muted text-xs">Cantidad vendida * (máx {maxCantidad})</Label>
+              <Input type="number" min={1} max={maxCantidad} value={form.cantidad_vendida} autoFocus
+                onChange={set("cantidad_vendida")} className={INPUT_CLS} placeholder="0" />
+            </div>
+            <div>
+              <Label className="text-agro-muted text-xs">Fecha *</Label>
+              <Input type="date" value={form.fecha} onChange={set("fecha")} className={INPUT_CLS} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-agro-muted text-xs">Peso total (kg) *</Label>
+              <Input type="number" min={0} step="0.1" value={form.peso_total_kg} onChange={set("peso_total_kg")}
+                className={INPUT_CLS} placeholder="0.0" />
+            </div>
+            <div>
+              <Label className="text-agro-muted text-xs">Precio / kg *</Label>
+              <Input type="number" min={0} step="0.01" value={form.precio_kg} onChange={set("precio_kg")}
+                className={INPUT_CLS} placeholder="0.00" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-agro-muted text-xs">Moneda</Label>
+            <select value={form.moneda} onChange={set("moneda")} className={SELECT_CLS}>
+              <option value="USD">USD</option>
+              <option value="UYU">UYU</option>
+            </select>
+          </div>
+          {totalEstimado && (
+            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+              Total estimado: {form.moneda} {totalEstimado}
+            </p>
+          )}
+          <div>
+            <Label className="text-agro-muted text-xs">Notas</Label>
+            <Input value={form.notas} onChange={set("notas")} className={INPUT_CLS} placeholder="Opcional..." />
+          </div>
+          <div className="flex gap-2 pt-1">
             <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={!form.fecha_salida || !form.peso_salida_kg || mutation.isPending}
-              onClick={() => mutation.mutate()}>
-              {mutation.isPending ? "Guardando..." : "Guardar"}
+              disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+              {mut.isPending ? "Guardando..." : "Registrar venta"}
             </Button>
             <Button variant="outline" onClick={onClose} className="border-agro-accent/20 text-agro-muted">Cancelar</Button>
           </div>
@@ -212,7 +415,7 @@ function ModalEvento({ potreroId, open, onClose }: { potreroId: number; open: bo
     tipo: "tacto", fecha: todayStr(), vientres_totales: "", resultado: "", notas: "",
   });
 
-  const mutation = useMutation({
+  const mut = useMutation({
     mutationFn: () => {
       const data: EventoCreate = {
         potrero_id: potreroId,
@@ -243,8 +446,7 @@ function ModalEvento({ potreroId, open, onClose }: { potreroId: number; open: bo
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-agro-muted text-xs">Tipo *</Label>
-              <select value={form.tipo} onChange={(e) => setForm(f => ({ ...f, tipo: e.target.value }))}
-                className="mt-1 w-full bg-agro-bg border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2">
+              <select value={form.tipo} onChange={(e) => setForm(f => ({ ...f, tipo: e.target.value }))} className={SELECT_CLS}>
                 <option value="tacto">Tacto</option>
                 <option value="paricion">Parición</option>
                 <option value="destete">Destete</option>
@@ -253,8 +455,7 @@ function ModalEvento({ potreroId, open, onClose }: { potreroId: number; open: bo
             <div>
               <Label className="text-agro-muted text-xs">Fecha *</Label>
               <Input type="date" value={form.fecha}
-                onChange={(e) => setForm(f => ({ ...f, fecha: e.target.value }))}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" />
+                onChange={(e) => setForm(f => ({ ...f, fecha: e.target.value }))} className={INPUT_CLS} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -262,24 +463,24 @@ function ModalEvento({ potreroId, open, onClose }: { potreroId: number; open: bo
               <Label className="text-agro-muted text-xs">Total vientres *</Label>
               <Input type="number" min={1} value={form.vientres_totales}
                 onChange={(e) => setForm(f => ({ ...f, vientres_totales: e.target.value }))}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="0" />
+                className={INPUT_CLS} placeholder="0" />
             </div>
             <div>
               <Label className="text-agro-muted text-xs">Resultado *</Label>
               <Input type="number" min={0} value={form.resultado}
                 onChange={(e) => setForm(f => ({ ...f, resultado: e.target.value }))}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="0" />
+                className={INPUT_CLS} placeholder="0" />
             </div>
           </div>
           <div>
             <Label className="text-agro-muted text-xs">Notas</Label>
             <Input value={form.notas} onChange={(e) => setForm(f => ({ ...f, notas: e.target.value }))}
-              className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="Opcional..." />
+              className={INPUT_CLS} placeholder="Opcional..." />
           </div>
           <div className="flex gap-2 pt-1">
             <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={!valid || mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? "Guardando..." : "Guardar"}
+              disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+              {mut.isPending ? "Guardando..." : "Guardar"}
             </Button>
             <Button variant="outline" onClick={onClose} className="border-agro-accent/20 text-agro-muted">Cancelar</Button>
           </div>
@@ -300,7 +501,7 @@ function ModalCiclo({ potreroId, open, onClose }: { potreroId: number; open: boo
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const mutation = useMutation({
+  const mut = useMutation({
     mutationFn: () => {
       const data: CicloCreate = {
         potrero_id: potreroId,
@@ -334,50 +535,46 @@ function ModalCiclo({ potreroId, open, onClose }: { potreroId: number; open: boo
             <div>
               <Label className="text-agro-muted text-xs">Zafra *</Label>
               <Input value={form.zafra} onChange={set("zafra")} autoFocus
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="2024/2025" />
+                className={INPUT_CLS} placeholder="2024/2025" />
             </div>
             <div>
               <Label className="text-agro-muted text-xs">Cultivo *</Label>
-              <Input value={form.cultivo} onChange={set("cultivo")}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="Soja, Maíz..." />
+              <Input value={form.cultivo} onChange={set("cultivo")} className={INPUT_CLS} placeholder="Soja, Maíz..." />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-agro-muted text-xs">Fecha siembra</Label>
-              <Input type="date" value={form.fecha_siembra} onChange={set("fecha_siembra")}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" />
+              <Input type="date" value={form.fecha_siembra} onChange={set("fecha_siembra")} className={INPUT_CLS} />
             </div>
             <div>
               <Label className="text-agro-muted text-xs">Fecha cosecha</Label>
-              <Input type="date" value={form.fecha_cosecha} onChange={set("fecha_cosecha")}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" />
+              <Input type="date" value={form.fecha_cosecha} onChange={set("fecha_cosecha")} className={INPUT_CLS} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-agro-muted text-xs">Toneladas cosechadas</Label>
               <Input type="number" min={0} step="0.001" value={form.toneladas_cosechadas} onChange={set("toneladas_cosechadas")}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="0.000" />
+                className={INPUT_CLS} placeholder="0.000" />
             </div>
             <div>
               <Label className="text-agro-muted text-xs">Precio / tn</Label>
               <Input type="number" min={0} step="0.01" value={form.precio_venta_tn} onChange={set("precio_venta_tn")}
-                className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm" placeholder="0.00" />
+                className={INPUT_CLS} placeholder="0.00" />
             </div>
           </div>
           <div>
             <Label className="text-agro-muted text-xs">Moneda</Label>
-            <select value={form.moneda} onChange={set("moneda")}
-              className="mt-1 w-full bg-agro-bg border border-agro-accent/20 text-agro-text text-sm rounded-md px-3 py-2">
+            <select value={form.moneda} onChange={set("moneda")} className={SELECT_CLS}>
               <option value="USD">USD</option>
               <option value="UYU">UYU</option>
             </select>
           </div>
           <div className="flex gap-2 pt-1">
             <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={!valid || mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? "Guardando..." : "Guardar"}
+              disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+              {mut.isPending ? "Guardando..." : "Guardar"}
             </Button>
             <Button variant="outline" onClick={onClose} className="border-agro-accent/20 text-agro-muted">Cancelar</Button>
           </div>
@@ -387,11 +584,46 @@ function ModalCiclo({ potreroId, open, onClose }: { potreroId: number; open: boo
   );
 }
 
-// ── Panel por potrero ─────────────────────────────────────────────────────────
+// ── Lote row ──────────────────────────────────────────────────────────────────
 
-const TIPO_LABEL: Record<string, string> = {
-  ganaderia: "Ganadería", agricultura: "Agricultura", mixto: "Mixto",
-};
+function LoteRow({ lote, onMover, onDividir, onVender }: {
+  lote: Lote;
+  onMover: () => void;
+  onDividir: () => void;
+  onVender: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5 text-xs">
+      <div className="flex-1 min-w-0">
+        <span className="font-medium text-agro-text capitalize">{lote.categoria}</span>
+        <span className="text-agro-muted ml-1.5">{lote.cantidad} cab.</span>
+        <span className="text-agro-muted ml-1.5">· Ent: {fmtDate(lote.fecha_entrada)}</span>
+        {lote.kg_producidos != null && (
+          <span className="text-agro-text ml-1.5">· {lote.kg_producidos.toFixed(0)} kg prod.</span>
+        )}
+        {lote.gdp_kg_dia != null && (
+          <span className="text-agro-muted ml-1.5">GDP: {lote.gdp_kg_dia.toFixed(3)}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button onClick={onMover}
+          className="flex items-center gap-1 px-2 py-1 rounded text-blue-600 hover:bg-blue-50 transition-colors whitespace-nowrap">
+          <ArrowRightLeft className="h-3 w-3" />Mover
+        </button>
+        <button onClick={onDividir}
+          className="flex items-center gap-1 px-2 py-1 rounded text-amber-600 hover:bg-amber-50 transition-colors whitespace-nowrap">
+          <Scissors className="h-3 w-3" />Dividir
+        </button>
+        <button onClick={onVender}
+          className="flex items-center gap-1 px-2 py-1 rounded text-emerald-600 hover:bg-emerald-50 transition-colors whitespace-nowrap">
+          <ShoppingCart className="h-3 w-3" />Vender
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── SectionHeader ─────────────────────────────────────────────────────────────
 
 function SectionHeader({ title, onAdd, addLabel }: { title: string; onAdd: () => void; addLabel: string }) {
   return (
@@ -405,19 +637,27 @@ function SectionHeader({ title, onAdd, addLabel }: { title: string; onAdd: () =>
   );
 }
 
-function PotreroPanel({ potrero }: { potrero: Potrero }) {
+// ── Panel por potrero ─────────────────────────────────────────────────────────
+
+const TIPO_LABEL: Record<string, string> = {
+  ganaderia: "Ganadería", agricultura: "Agricultura", mixto: "Mixto",
+};
+
+function PotreroPanel({ potrero, potreros }: { potrero: Potrero; potreros: Potrero[] }) {
   const qc = useQueryClient();
   const isGan = potrero.tipo !== "agricultura";
   const isAgr = potrero.tipo === "agricultura";
 
   const [loteModalOpen, setLoteModalOpen] = useState(false);
-  const [salidaLote, setSalidaLote] = useState<LoteGanado | null>(null);
   const [eventoModalOpen, setEventoModalOpen] = useState(false);
   const [cicloModalOpen, setCicloModalOpen] = useState(false);
+  const [loteMover, setLoteMover] = useState<Lote | null>(null);
+  const [loteDividir, setLoteDividir] = useState<Lote | null>(null);
+  const [loteVender, setLoteVender] = useState<Lote | null>(null);
 
   const { data: lotes = [] } = useQuery({
     queryKey: ["lotes", potrero.id],
-    queryFn: () => getLotes(potrero.id),
+    queryFn: () => getLotes({ potrero_id: potrero.id }),
     enabled: isGan,
     staleTime: 30000,
   });
@@ -437,20 +677,15 @@ function PotreroPanel({ potrero }: { potrero: Potrero }) {
   });
 
   const ha = potrero.hectareas != null ? Number(potrero.hectareas) : null;
-  const closedLotes = lotes.filter(l => l.kg_producidos != null);
-  const kgHa = ha && ha > 0 && closedLotes.length > 0
-    ? closedLotes.reduce((s, l) => s + (l.kg_producidos ?? 0), 0) / ha
+  const lotesConKg = lotes.filter(l => l.kg_producidos != null);
+  const kgHa = ha && ha > 0 && lotesConKg.length > 0
+    ? lotesConKg.reduce((s, l) => s + (l.kg_producidos ?? 0), 0) / ha
     : null;
-  const gdpValues = closedLotes.filter(l => l.gdp_kg_dia != null).map(l => l.gdp_kg_dia!);
+  const gdpValues = lotes.filter(l => l.gdp_kg_dia != null).map(l => l.gdp_kg_dia!);
   const gdpAvg = gdpValues.length > 0 ? gdpValues.reduce((s, v) => s + v, 0) / gdpValues.length : null;
   const tasaRep = eventos[0]?.tasa_pct ?? null;
   const lastRinde = ciclos.find(c => c.rinde_tn_ha != null)?.rinde_tn_ha ?? null;
 
-  const deleteLoteMut = useMutation({
-    mutationFn: deleteLote,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["lotes", potrero.id] }),
-    onError: () => toast({ title: "Error al eliminar", variant: "destructive" }),
-  });
   const deleteEventoMut = useMutation({
     mutationFn: deleteEvento,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["eventos", potrero.id] }),
@@ -464,7 +699,6 @@ function PotreroPanel({ potrero }: { potrero: Potrero }) {
 
   return (
     <Card className="overflow-hidden">
-      {/* Header */}
       <CardHeader className="pb-3 border-b border-agro-accent/10">
         <div className="flex items-start justify-between gap-2 flex-wrap">
           <div>
@@ -494,45 +728,23 @@ function PotreroPanel({ potrero }: { potrero: Potrero }) {
       <CardContent className="p-0">
         {isGan && (
           <>
-            {/* Lotes de ganado */}
             <div className="border-b border-agro-accent/10">
               <SectionHeader title="Lotes de ganado" addLabel="Nuevo lote" onAdd={() => setLoteModalOpen(true)} />
               <div className="divide-y divide-agro-accent/10">
                 {lotes.length === 0 ? (
-                  <p className="px-4 py-3 text-xs text-agro-muted italic">Sin lotes registrados</p>
+                  <p className="px-4 py-3 text-xs text-agro-muted italic">Sin lotes activos</p>
                 ) : lotes.map(l => (
-                  <div key={l.id} className="flex items-center gap-3 px-4 py-2.5 text-xs">
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-agro-text capitalize">{l.especie}</span>
-                      <span className="text-agro-muted ml-1.5">{l.cantidad} cab.</span>
-                      <span className="text-agro-muted ml-1.5">· Ent: {fmtDate(l.fecha_entrada)}</span>
-                      {l.fecha_salida && <span className="text-agro-muted ml-1.5">· Sal: {fmtDate(l.fecha_salida)}</span>}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {l.kg_producidos != null ? (
-                        <>
-                          <span className="text-agro-text font-medium">{l.kg_producidos.toFixed(0)} kg prod.</span>
-                          {l.gdp_kg_dia != null && (
-                            <span className="text-agro-muted">GDP: {l.gdp_kg_dia.toFixed(3)}</span>
-                          )}
-                        </>
-                      ) : (
-                        <button onClick={() => setSalidaLote(l)}
-                          className="text-xs text-emerald-600 hover:text-emerald-700 font-medium border border-emerald-200 rounded px-2 py-0.5 whitespace-nowrap">
-                          Registrar salida
-                        </button>
-                      )}
-                      <button onClick={() => { if (confirm("¿Eliminar lote?")) deleteLoteMut.mutate(l.id); }}
-                        className="text-agro-muted hover:text-red-500 transition-colors">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
+                  <LoteRow
+                    key={l.id}
+                    lote={l}
+                    onMover={() => setLoteMover(l)}
+                    onDividir={() => setLoteDividir(l)}
+                    onVender={() => setLoteVender(l)}
+                  />
                 ))}
               </div>
             </div>
 
-            {/* Reproducción */}
             <div>
               <SectionHeader title="Reproducción" addLabel="Nuevo evento" onAdd={() => setEventoModalOpen(true)} />
               <div className="divide-y divide-agro-accent/10">
@@ -595,9 +807,11 @@ function PotreroPanel({ potrero }: { potrero: Potrero }) {
       </CardContent>
 
       <ModalNuevoLote potreroId={potrero.id} open={loteModalOpen} onClose={() => setLoteModalOpen(false)} />
-      <ModalSalida lote={salidaLote} onClose={() => setSalidaLote(null)} />
       <ModalEvento potreroId={potrero.id} open={eventoModalOpen} onClose={() => setEventoModalOpen(false)} />
       <ModalCiclo potreroId={potrero.id} open={cicloModalOpen} onClose={() => setCicloModalOpen(false)} />
+      <ModalMoverLote lote={loteMover} potreros={potreros} onClose={() => setLoteMover(null)} />
+      <ModalDividirLote lote={loteDividir} potreros={potreros} onClose={() => setLoteDividir(null)} />
+      <ModalVenderLote lote={loteVender} onClose={() => setLoteVender(null)} />
     </Card>
   );
 }
@@ -648,7 +862,7 @@ export default function ProductividadPage() {
         <EmptyState />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {potreros.map(p => <PotreroPanel key={p.id} potrero={p} />)}
+          {potreros.map(p => <PotreroPanel key={p.id} potrero={p} potreros={potreros} />)}
         </div>
       )}
     </div>

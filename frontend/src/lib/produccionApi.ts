@@ -5,30 +5,7 @@ import type {
   CicloUpdate,
   EventoCreate,
   EventoReproductivo,
-  LoteCreate,
-  LoteGanado,
-  LoteUpdate,
 } from "@/types/produccion";
-
-// ── Lotes de ganado ───────────────────────────────────────────────────────────
-
-export const getLotes = (potreroId: number): Promise<LoteGanado[]> =>
-  apiFetch(`/produccion/potreros/${potreroId}/lotes`);
-
-export const createLote = (potreroId: number, data: LoteCreate): Promise<LoteGanado> =>
-  apiFetch(`/produccion/potreros/${potreroId}/lotes`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const updateLote = (loteId: number, data: LoteUpdate): Promise<LoteGanado> =>
-  apiFetch(`/produccion/lotes/${loteId}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-
-export const deleteLote = (loteId: number): Promise<void> =>
-  apiFetch(`/produccion/lotes/${loteId}`, { method: "DELETE" });
 
 // ── Eventos reproductivos ─────────────────────────────────────────────────────
 

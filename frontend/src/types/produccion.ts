@@ -1,35 +1,3 @@
-export interface LoteGanado {
-  id: number;
-  potrero_id: number;
-  especie: string;
-  cantidad: number;
-  fecha_entrada: string;
-  peso_entrada_kg: number;
-  fecha_salida: string | null;
-  peso_salida_kg: number | null;
-  notas: string | null;
-  dias_en_potrero: number | null;
-  kg_producidos: number | null;
-  gdp_kg_dia: number | null;
-}
-
-export interface LoteCreate {
-  potrero_id: number;
-  especie: string;
-  cantidad: number;
-  fecha_entrada: string;
-  peso_entrada_kg: number;
-  fecha_salida?: string;
-  peso_salida_kg?: number;
-  notas?: string;
-}
-
-export interface LoteUpdate {
-  fecha_salida?: string;
-  peso_salida_kg?: number;
-  notas?: string;
-}
-
 export interface EventoReproductivo {
   id: number;
   potrero_id: number;
