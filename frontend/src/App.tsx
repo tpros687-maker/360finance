@@ -27,6 +27,7 @@ const ProductosPage = lazy(() => import("@/pages/ProductosPage"));
 const PagoPage = lazy(() => import("@/pages/PagoPage"));
 const FacturacionPage = lazy(() => import("@/pages/FacturacionPage"));
 const RentabilidadPage = lazy(() => import("@/pages/RentabilidadPage"));
+const RentabilidadHaPage = lazy(() => import("@/pages/RentabilidadHaPage"));
 const ProductividadPage = lazy(() => import("@/pages/ProductividadPage"));
 const RentabilidadPotreroPage = lazy(() => import("@/pages/RentabilidadPotreroPage"));
 const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
@@ -70,6 +71,7 @@ function AppRoutes() {
             <Route path="/productos" element={<ProductosPage />} />
             <Route path="/facturacion" element={<FacturacionPage />} />
             <Route path="/rentabilidad" element={<RentabilidadPage />} />
+            <Route path="/rentabilidad-ha" element={<RentabilidadHaPage />} />
             <Route path="/rentabilidad-ha/potreros/:id" element={<RentabilidadPotreroPage />} />
             <Route path="/productividad" element={<ProductividadPage />} />
             <Route path="/flujo-caja" element={<FlujoCajaPage />} />

@@ -218,12 +218,12 @@ export function ResumenEstablecimiento({
             <div>
               <span
                 className={`text-2xl font-semibold ${
-                  proyeccion.base.margen_esperado_usd >= 0
+                  proyeccion.base.margen_usd >= 0
                     ? "text-emerald-400"
                     : "text-red-400"
                 }`}
               >
-                {fmtUSD(proyeccion.base.margen_esperado_usd)}
+                {fmtUSD(proyeccion.base.margen_usd)}
               </span>
             </div>
           )}
@@ -232,13 +232,13 @@ export function ResumenEstablecimiento({
               <span>
                 Pesimista:{" "}
                 <span className="text-red-400">
-                  {fmtUSD(proyeccion.pesimista.margen_esperado_usd)}
+                  {fmtUSD(proyeccion.pesimista.margen_usd)}
                 </span>
               </span>
               <span>
                 Optimista:{" "}
                 <span className="text-emerald-400">
-                  {fmtUSD(proyeccion.optimista.margen_esperado_usd)}
+                  {fmtUSD(proyeccion.optimista.margen_usd)}
                 </span>
               </span>
             </div>
