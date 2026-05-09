@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.categoria import TipoMovimiento
@@ -198,6 +198,150 @@ async def calcular_gastos_potrero(
             estructurales += (usd * fraccion).quantize(Decimal("0.01"))
 
     return directos, prorrateados, estructurales
+
+
+async def calcular_rentabilidad_potrero(
+    potrero_id: int,
+    periodo_desde: Optional[date],
+    periodo_hasta: Optional[date],
+    user_id: int,
+    db: AsyncSession,
+) -> "PotreroRentabilidad":
+    hoy = date.today()
+
+    res = await db.execute(
+        select(Potrero).where(Potrero.id == potrero_id, Potrero.user_id == user_id)
+    )
+    potrero = res.scalar_one_or_none()
+    if potrero is None:
+        raise ValueError(f"Potrero {potrero_id} no encontrado o sin acceso")
+
+    ha_potrero = Decimal(str(potrero.hectareas)) if potrero.hectareas else None
+
+    # Total ha del establecimiento para prorratear costos compartidos
+    tot_res = await db.execute(
+        select(func.sum(Potrero.hectareas)).where(
+            Potrero.user_id == user_id,
+            Potrero.hectareas.isnot(None),
+        )
+    )
+    total_ha_raw = tot_res.scalar_one_or_none()
+    total_ha_estab = Decimal(str(total_ha_raw)) if total_ha_raw else Decimal("0")
+
+    fecha_desde = periodo_desde or date(hoy.year, 1, 1)
+    fecha_hasta = periodo_hasta or hoy
+    dias_periodo = max((fecha_hasta - fecha_desde).days, 1)
+
+    # Actividades del potrero en el período
+    lote_stmt = select(LoteGanado).where(LoteGanado.potrero_id == potrero_id)
+    if periodo_desde:
+        lote_stmt = lote_stmt.where(LoteGanado.fecha_entrada >= periodo_desde)
+    if periodo_hasta:
+        lote_stmt = lote_stmt.where(LoteGanado.fecha_entrada <= periodo_hasta)
+    lotes = (await db.execute(lote_stmt)).scalars().all()
+
+    ciclo_stmt = select(CicloAgricola).where(CicloAgricola.potrero_id == potrero_id)
+    if periodo_desde:
+        ciclo_stmt = ciclo_stmt.where(CicloAgricola.fecha_siembra >= periodo_desde)
+    if periodo_hasta:
+        ciclo_stmt = ciclo_stmt.where(CicloAgricola.fecha_siembra <= periodo_hasta)
+    ciclos = (await db.execute(ciclo_stmt)).scalars().all()
+
+    async def gastos_directos_actividad(tipo: str, act_id: int) -> Decimal:
+        filtros = [
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.actividad_tipo == tipo,
+            Registro.actividad_id == act_id,
+        ]
+        if periodo_desde:
+            filtros.append(Registro.fecha >= periodo_desde)
+        if periodo_hasta:
+            filtros.append(Registro.fecha <= periodo_hasta)
+        g_res = await db.execute(select(Registro).where(*filtros))
+        total = Decimal("0")
+        for r in g_res.scalars().all():
+            total += await convertir_a_usd(Decimal(str(r.monto)), r.moneda, r.fecha, db)
+        return total
+
+    actividades: list[ActividadRentabilidad] = []
+    total_ingresos = Decimal("0")
+    any_proyectado = False
+
+    for lote in lotes:
+        ingresos, proyectado = await calcular_ingresos_actividad("lote", lote.id, db)
+        gastos_d = await gastos_directos_actividad("lote", lote.id)
+        margen = ingresos - gastos_d
+        margen_ha = (margen / ha_potrero).quantize(Decimal("0.01")) if ha_potrero else None
+        f_out = lote.fecha_salida or hoy
+        dias_lote = max((f_out - lote.fecha_entrada).days, 1)
+        anualizado = (
+            (margen_ha * Decimal("365") / Decimal(str(dias_lote))).quantize(Decimal("0.01"))
+            if margen_ha is not None else None
+        )
+        if proyectado:
+            any_proyectado = True
+        total_ingresos += ingresos
+        actividades.append(ActividadRentabilidad(
+            actividad_tipo="lote",
+            actividad_id=lote.id,
+            nombre=lote.nombre or f"Lote #{lote.id}",
+            ingresos_usd=ingresos,
+            gastos_directos_usd=gastos_d,
+            margen_usd=margen,
+            margen_ha_usd=margen_ha,
+            anualizado_usd_ha=anualizado,
+            es_proyectado=proyectado,
+        ))
+
+    for ciclo in ciclos:
+        ingresos, proyectado = await calcular_ingresos_actividad("ciclo", ciclo.id, db)
+        gastos_d = await gastos_directos_actividad("ciclo", ciclo.id)
+        margen = ingresos - gastos_d
+        margen_ha = (margen / ha_potrero).quantize(Decimal("0.01")) if ha_potrero else None
+        f_out = ciclo.fecha_cosecha or hoy
+        dias_ciclo = max((f_out - ciclo.fecha_siembra).days, 1)
+        anualizado = (
+            (margen_ha * Decimal("365") / Decimal(str(dias_ciclo))).quantize(Decimal("0.01"))
+            if margen_ha is not None else None
+        )
+        if proyectado:
+            any_proyectado = True
+        total_ingresos += ingresos
+        actividades.append(ActividadRentabilidad(
+            actividad_tipo="ciclo",
+            actividad_id=ciclo.id,
+            nombre=ciclo.cultivo or f"Ciclo #{ciclo.id}",
+            ingresos_usd=ingresos,
+            gastos_directos_usd=gastos_d,
+            margen_usd=margen,
+            margen_ha_usd=margen_ha,
+            anualizado_usd_ha=anualizado,
+            es_proyectado=proyectado,
+        ))
+
+    directos, prorrateados, estructurales = await calcular_gastos_potrero(
+        potrero_id, periodo_desde, periodo_hasta, total_ha_estab, db
+    )
+
+    margen_neto = total_ingresos - directos - prorrateados - estructurales
+    margen_neto_ha = (margen_neto / ha_potrero).quantize(Decimal("0.01")) if ha_potrero else None
+    margen_neto_ha_anualizado = (
+        (margen_neto_ha * Decimal("365") / Decimal(str(dias_periodo))).quantize(Decimal("0.01"))
+        if margen_neto_ha is not None else None
+    )
+
+    return PotreroRentabilidad(
+        potrero_id=potrero_id,
+        nombre=potrero.nombre,
+        hectareas=ha_potrero,
+        actividades=actividades,
+        gastos_prorrateados_usd=prorrateados,
+        gastos_estructurales_usd=estructurales,
+        margen_neto_usd=margen_neto,
+        margen_neto_ha_usd=margen_neto_ha,
+        margen_neto_ha_anualizado_usd=margen_neto_ha_anualizado,
+        es_proyectado=any_proyectado,
+    )
 
 
 class ActividadRentabilidad(BaseModel):
