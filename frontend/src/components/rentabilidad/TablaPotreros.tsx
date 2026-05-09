@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Loader2, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, Loader2, TrendingDown, TrendingUp } from "lucide-react";
 import { Semaforo } from "./Semaforo";
 import type { Referencias } from "./Semaforo";
 import { getRentabilidadPotrero } from "@/lib/rentabilidadApi";
@@ -120,6 +121,15 @@ function DetallePotrero({ potreroId, periodo }: { potreroId: number; periodo: Pe
         <span>Prorrateo: <span className="text-slate-300">{fmtUSD(data.gastos_prorrateados_usd)}</span></span>
         <span>Estructural: <span className="text-slate-300">{fmtUSD(data.gastos_estructurales_usd)}</span></span>
       </div>
+
+      {/* Link to full detail page */}
+      <Link
+        to={`/rentabilidad-ha/potreros/${data.potrero_id}`}
+        className="inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 transition-colors"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Ver detalle completo
+      </Link>
 
       {/* Top 5 gastos */}
       {data.top_gastos.length > 0 && (
