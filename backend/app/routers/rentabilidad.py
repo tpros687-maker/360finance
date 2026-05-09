@@ -127,3 +127,82 @@ async def detalle_rentabilidad_potrero(
         ))
 
     return PotreroRentabilidadDetalle(**base.model_dump(), top_gastos=top_gastos)
+
+
+class EscenarioProyeccion(BaseModel):
+    ingresos_esperados_usd: Decimal
+    gastos_esperados_usd: Decimal
+    margen_esperado_usd: Decimal
+    margen_ha_esperado_usd: Optional[Decimal]
+
+
+class ProyeccionAnual(BaseModel):
+    periodo_analizado_dias: int
+    total_ha: Optional[Decimal]
+    pesimista: EscenarioProyeccion
+    base: EscenarioProyeccion
+    optimista: EscenarioProyeccion
+
+
+@router.get("/proyeccion", response_model=ProyeccionAnual)
+async def proyeccion_anual(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    hoy = date.today()
+    inicio_anio = date(hoy.year, 1, 1)
+    dias_transcurridos = max((hoy - inicio_anio).days, 1)
+    factor_anual = Decimal("365") / Decimal(str(dias_transcurridos))
+
+    res = await db.execute(
+        select(Potrero).where(Potrero.user_id == current_user.id)
+    )
+    potreros = res.scalars().all()
+
+    total_ingresos = Decimal("0")
+    total_gastos = Decimal("0")
+    total_ha = Decimal("0")
+
+    for potrero in potreros:
+        if potrero.hectareas:
+            total_ha += Decimal(str(potrero.hectareas))
+        try:
+            r = await calcular_rentabilidad_potrero(
+                potrero_id=potrero.id,
+                periodo_desde=inicio_anio,
+                periodo_hasta=hoy,
+                user_id=current_user.id,
+                db=db,
+            )
+        except Exception:
+            continue
+
+        ingresos_p = sum(
+            (act.ingresos_usd for act in r.actividades), Decimal("0")
+        )
+        # gastos totales del potrero = ingresos - margen_neto
+        gastos_p = ingresos_p - r.margen_neto_usd
+        total_ingresos += ingresos_p
+        total_gastos += gastos_p
+
+    ha_ref = total_ha if total_ha > 0 else None
+
+    def escenario(factor: Decimal) -> EscenarioProyeccion:
+        ing = (total_ingresos * factor_anual * factor).quantize(Decimal("0.01"))
+        gas = (total_gastos * factor_anual * factor).quantize(Decimal("0.01"))
+        mar = ing - gas
+        mar_ha = (mar / ha_ref).quantize(Decimal("0.01")) if ha_ref else None
+        return EscenarioProyeccion(
+            ingresos_esperados_usd=ing,
+            gastos_esperados_usd=gas,
+            margen_esperado_usd=mar,
+            margen_ha_esperado_usd=mar_ha,
+        )
+
+    return ProyeccionAnual(
+        periodo_analizado_dias=dias_transcurridos,
+        total_ha=ha_ref,
+        pesimista=escenario(Decimal("0.85")),
+        base=escenario(Decimal("1")),
+        optimista=escenario(Decimal("1.15")),
+    )
