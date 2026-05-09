@@ -131,6 +131,45 @@ async def detalle_rentabilidad_potrero(
     return PotreroRentabilidadDetalle(**base.model_dump(), top_gastos=top_gastos)
 
 
+class PotreroRentabilidadAnio(PotreroRentabilidad):
+    anio: int
+
+
+@router.get("/potreros/{potrero_id}/historico", response_model=list[PotreroRentabilidadAnio])
+async def historico_rentabilidad_potrero(
+    potrero_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    hoy = date.today()
+    anio_actual = hoy.year
+
+    periodos = [
+        (anio_actual - 3, date(anio_actual - 3, 1, 1), date(anio_actual - 3, 12, 31)),
+        (anio_actual - 2, date(anio_actual - 2, 1, 1), date(anio_actual - 2, 12, 31)),
+        (anio_actual - 1, date(anio_actual - 1, 1, 1), date(anio_actual - 1, 12, 31)),
+        (anio_actual,     date(anio_actual, 1, 1),     hoy),
+    ]
+
+    resultados: list[PotreroRentabilidadAnio] = []
+    for anio, desde, hasta in periodos:
+        try:
+            r = await calcular_rentabilidad_potrero(
+                potrero_id=potrero_id,
+                periodo_desde=desde,
+                periodo_hasta=hasta,
+                user_id=current_user.id,
+                db=db,
+            )
+            resultados.append(PotreroRentabilidadAnio(**r.model_dump(), anio=anio))
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Potrero no encontrado")
+        except Exception:
+            continue
+
+    return resultados
+
+
 class EscenarioProyeccion(BaseModel):
     ingresos_esperados_usd: Decimal
     gastos_esperados_usd: Decimal
