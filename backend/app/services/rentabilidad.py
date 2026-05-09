@@ -344,6 +344,114 @@ async def calcular_rentabilidad_potrero(
     )
 
 
+class EscenarioProyeccion(BaseModel):
+    ingresos_usd: Decimal
+    gastos_usd: Decimal
+    margen_usd: Decimal
+    margen_ha_usd: Optional[Decimal]
+
+
+class ProyeccionAnualResult(BaseModel):
+    periodo_analizado_dias: int
+    total_ha: Optional[Decimal]
+    pesimista: EscenarioProyeccion
+    base: EscenarioProyeccion
+    optimista: EscenarioProyeccion
+
+
+async def calcular_proyeccion_anual(
+    user_id: int,
+    db: AsyncSession,
+) -> ProyeccionAnualResult:
+    hoy = date.today()
+    inicio_anio = date(hoy.year, 1, 1)
+    dias_transcurridos = max((hoy - inicio_anio).days, 1)
+    factor_anual = Decimal("365") / Decimal(str(dias_transcurridos))
+
+    pot_res = await db.execute(select(Potrero).where(Potrero.user_id == user_id))
+    potreros = pot_res.scalars().all()
+
+    total_ingresos = Decimal("0")
+    total_gastos = Decimal("0")
+    total_ha = Decimal("0")
+
+    for potrero in potreros:
+        if potrero.hectareas:
+            total_ha += Decimal(str(potrero.hectareas))
+        try:
+            r = await calcular_rentabilidad_potrero(
+                potrero_id=potrero.id,
+                periodo_desde=inicio_anio,
+                periodo_hasta=hoy,
+                user_id=user_id,
+                db=db,
+            )
+        except Exception:
+            continue
+
+        ingresos_p = sum((act.ingresos_usd for act in r.actividades), Decimal("0"))
+        gastos_p = ingresos_p - r.margen_neto_usd
+        total_ingresos += ingresos_p
+        total_gastos += gastos_p
+
+        # Estimate remaining income from open activities with no recorded income yet
+        for act in r.actividades:
+            if not act.es_proyectado or act.ingresos_usd > 0:
+                continue
+            if act.actividad_tipo == "lote":
+                lote_res = await db.execute(
+                    select(LoteGanado).where(LoteGanado.id == act.actividad_id)
+                )
+                lote = lote_res.scalar_one_or_none()
+                if lote and lote.peso_entrada_kg and lote.cantidad:
+                    # Assume 200 kg gain per head at USD 2.20/kg (novillo exportación)
+                    ingreso_estimado = (
+                        Decimal("200") * Decimal(str(lote.cantidad)) * Decimal("2.20")
+                    ).quantize(Decimal("0.01"))
+                    total_ingresos += ingreso_estimado
+            elif act.actividad_tipo == "ciclo":
+                ciclo_res = await db.execute(
+                    select(CicloAgricola).where(CicloAgricola.id == act.actividad_id)
+                )
+                ciclo = ciclo_res.scalar_one_or_none()
+                # Estimate using reference yield 2.5 tn/ha × potrero ha × precio_venta_tn
+                if (
+                    ciclo
+                    and ciclo.precio_venta_tn
+                    and potrero.hectareas
+                ):
+                    tn_estimadas = Decimal("2.5") * Decimal(str(potrero.hectareas))
+                    ingreso_estimado = await convertir_a_usd(
+                        tn_estimadas * Decimal(str(ciclo.precio_venta_tn)),
+                        ciclo.moneda,
+                        hoy,
+                        db,
+                    )
+                    total_ingresos += ingreso_estimado
+
+    ha_ref = total_ha if total_ha > 0 else None
+
+    def escenario(factor: Decimal) -> EscenarioProyeccion:
+        ing = (total_ingresos * factor_anual * factor).quantize(Decimal("0.01"))
+        gas = (total_gastos * factor_anual * factor).quantize(Decimal("0.01"))
+        mar = ing - gas
+        mar_ha = (mar / ha_ref).quantize(Decimal("0.01")) if ha_ref else None
+        return EscenarioProyeccion(
+            ingresos_usd=ing,
+            gastos_usd=gas,
+            margen_usd=mar,
+            margen_ha_usd=mar_ha,
+        )
+
+    return ProyeccionAnualResult(
+        periodo_analizado_dias=dias_transcurridos,
+        total_ha=ha_ref,
+        pesimista=escenario(Decimal("0.85")),
+        base=escenario(Decimal("1")),
+        optimista=escenario(Decimal("1.15")),
+    )
+
+
 class ActividadRentabilidad(BaseModel):
     actividad_tipo: str  # "lote" | "ciclo"
     actividad_id: int

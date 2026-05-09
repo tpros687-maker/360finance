@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { ProyeccionAnualCards } from "@/components/rentabilidad/ProyeccionAnual";
+import { getProyeccionAnual } from "@/lib/rentabilidadApi";
 import {
   BarChart,
   Bar,
@@ -643,6 +645,50 @@ function DashboardProductor({
 
       {/* Fila 4 — Tabla categorías */}
       <CategoriaTabla categorias={data.por_categoria} />
+
+      {/* Fila 5 — Proyección anual */}
+      <ProyeccionSection />
+    </div>
+  );
+}
+
+// ── Proyección section ────────────────────────────────────────────────────────
+
+function ProyeccionSection() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["proyeccion-anual"],
+    queryFn: getProyeccionAnual,
+    staleTime: 5 * 60_000,
+  });
+
+  const MIN_DIAS = 30;
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-base font-semibold text-agro-text">Proyección al cierre del año</h2>
+
+      {isLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-44 rounded-2xl bg-slate-800 animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && data && data.periodo_analizado_dias < MIN_DIAS && (
+        <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 text-center">
+          <p className="text-sm text-slate-400">
+            Se necesitan al menos {MIN_DIAS} días de datos para calcular la proyección.
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Llevás {data.periodo_analizado_dias} días registrados este año.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && data && data.periodo_analizado_dias >= MIN_DIAS && (
+        <ProyeccionAnualCards data={data} />
+      )}
     </div>
   );
 }

@@ -52,10 +52,10 @@ export interface PotreroRentabilidadAnio extends PotreroRentabilidad {
 }
 
 export interface EscenarioProyeccion {
-  ingresos_esperados_usd: number;
-  gastos_esperados_usd: number;
-  margen_esperado_usd: number;
-  margen_ha_esperado_usd: number | null;
+  ingresos_usd: number;
+  gastos_usd: number;
+  margen_usd: number;
+  margen_ha_usd: number | null;
 }
 
 export interface ProyeccionAnual {
