@@ -170,6 +170,56 @@ async def historico_rentabilidad_potrero(
     return resultados
 
 
+@router.get("/potreros/{potrero_id}/gastos", response_model=list[GastoResumen])
+async def gastos_potrero(
+    potrero_id: int,
+    fecha_desde: Optional[date] = Query(None),
+    fecha_hasta: Optional[date] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Verify ownership
+    pot_res = await db.execute(
+        select(Potrero).where(Potrero.id == potrero_id, Potrero.user_id == current_user.id)
+    )
+    if pot_res.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Potrero no encontrado")
+
+    filtros = [
+        Registro.tipo == TipoMovimiento.gasto,
+        Registro.user_id == current_user.id,
+        Registro.potrero_id == potrero_id,
+    ]
+    if fecha_desde:
+        filtros.append(Registro.fecha >= fecha_desde)
+    if fecha_hasta:
+        filtros.append(Registro.fecha <= fecha_hasta)
+
+    res = await db.execute(
+        select(Registro).where(*filtros).order_by(Registro.monto.desc())
+    )
+    registros = res.scalars().all()
+
+    resultado: list[GastoResumen] = []
+    for reg in registros:
+        monto_usd = await convertir_a_usd(
+            Decimal(str(reg.monto)), reg.moneda, reg.fecha, db
+        )
+        resultado.append(GastoResumen(
+            id=reg.id,
+            fecha=reg.fecha,
+            descripcion=reg.descripcion,
+            monto=reg.monto,
+            moneda=reg.moneda,
+            monto_usd=monto_usd,
+            tipo_imputacion=reg.tipo_imputacion,
+            actividad_tipo=reg.actividad_tipo,
+            actividad_id=reg.actividad_id,
+        ))
+
+    return resultado
+
+
 class EscenarioProyeccion(BaseModel):
     ingresos_esperados_usd: Decimal
     gastos_esperados_usd: Decimal
