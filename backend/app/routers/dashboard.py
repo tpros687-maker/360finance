@@ -13,8 +13,10 @@ from app.deps import get_current_user
 from app.models.categoria import Categoria, TipoMovimiento
 from app.models.cliente import Cliente, CuentaCobrar, CuentaPagar, Proveedor
 from app.models.mapa import Animal, MovimientoGanado, Potrero
+from app.models.referencia import ReferenciaProductiva
 from app.models.registro import Registro
 from app.models.user import User
+from app.services.rentabilidad import calcular_rentabilidad_potrero
 from app.schemas.dashboard import (
     AlertaItem,
     AnimalEspecie,
@@ -536,6 +538,76 @@ async def get_alertas(
             titulo=f"Pago próximo a vencer: {proveedor_nombre}",
             detalle=f"Vence en {dias} día{'s' if dias != 1 else ''} — {float(monto):,.0f}.",
         ))
+
+    # ── 7. RENTABILIDAD_ROJA ─────────────────────────────────────────────────
+    _UMBRAL_BAJO_DEFAULT = Decimal("80")
+    _DIAS_MINIMOS = 60
+    inicio_anio = date(today.year, 1, 1)
+    cutoff_60 = today - timedelta(days=_DIAS_MINIMOS)
+
+    # Cargar referencias productivas → umbral bajo por actividad
+    ref_q = await db.execute(
+        select(
+            ReferenciaProductiva.actividad,
+            func.min(ReferenciaProductiva.margen_neto_ha_usd_bajo).label("umbral"),
+        ).group_by(ReferenciaProductiva.actividad)
+    )
+    referencias: dict[str, Decimal] = {
+        row.actividad.lower(): Decimal(str(row.umbral)) for row in ref_q.all()
+    }
+
+    def _umbral_para_tipo(tipo: str | None) -> Decimal:
+        t = (tipo or "").lower()
+        if any(k in t for k in ("ganado", "bovino", "ovino", "lechero")):
+            return referencias.get("ganadería", _UMBRAL_BAJO_DEFAULT)
+        if any(k in t for k in ("agric", "cultiv", "soja", "maíz", "trigo")):
+            return referencias.get("agricultura", _UMBRAL_BAJO_DEFAULT)
+        return min(referencias.values()) if referencias else _UMBRAL_BAJO_DEFAULT
+
+    pot_todos_q = await db.execute(select(Potrero).where(Potrero.user_id == uid))
+    for potrero in pot_todos_q.scalars().all():
+        # Fecha del primer registro de este potrero en el año actual
+        primer_q = await db.execute(
+            select(func.min(Registro.fecha)).where(
+                Registro.user_id == uid,
+                Registro.potrero_id == potrero.id,
+                Registro.fecha >= inicio_anio,
+            )
+        )
+        primer_fecha = primer_q.scalar_one_or_none()
+        if primer_fecha is None or primer_fecha > cutoff_60:
+            continue  # menos de 60 días de datos → no aplica
+
+        dias_en_periodo = (today - primer_fecha).days
+
+        try:
+            r = await calcular_rentabilidad_potrero(
+                potrero_id=potrero.id,
+                periodo_desde=inicio_anio,
+                periodo_hasta=today,
+                user_id=uid,
+                db=db,
+            )
+        except Exception:
+            continue
+
+        margen = r.margen_neto_ha_anualizado_usd
+        if margen is None:
+            continue
+
+        umbral = _umbral_para_tipo(potrero.tipo)
+        if margen < umbral:
+            alertas.append(AlertaItem(
+                id=f"RENTABILIDAD_ROJA_{potrero.id}",
+                tipo="RENTABILIDAD_ROJA",
+                nivel="danger",
+                titulo=f"Rentabilidad crítica en «{potrero.nombre}»",
+                detalle=(
+                    f"El potrero lleva {dias_en_periodo} días en rojo. "
+                    f"Margen actual: USD {float(margen):,.0f}/ha "
+                    f"vs referencia mínima: USD {float(umbral):,.0f}/ha."
+                ),
+            ))
 
     # ── Ordenar: danger → warning → info ─────────────────────────────────────
     alertas.sort(key=lambda a: _NIVEL_ORDER[a.nivel])
