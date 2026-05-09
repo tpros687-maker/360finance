@@ -61,6 +61,9 @@ class RegistroCreate(BaseModel):
     descripcion: Optional[str] = None
     comprobante_url: Optional[str] = None
     potrero_id: Optional[int] = None
+    tipo_imputacion: Optional[str] = None
+    actividad_tipo: Optional[str] = None
+    actividad_id: Optional[int] = None
 
     @field_validator("monto")
     @classmethod
@@ -79,6 +82,9 @@ class RegistroUpdate(BaseModel):
     descripcion: Optional[str] = None
     comprobante_url: Optional[str] = None
     potrero_id: Optional[int] = None
+    tipo_imputacion: Optional[str] = None
+    actividad_tipo: Optional[str] = None
+    actividad_id: Optional[int] = None
 
     @field_validator("monto")
     @classmethod

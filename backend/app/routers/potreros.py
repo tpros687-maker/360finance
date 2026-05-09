@@ -15,6 +15,7 @@ from app.models.mapa import Animal, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
 from app.schemas.mapa import AplicacionRead, MovimientoRead, PotreroCreate, PotreroRead, PotreroUpdate, RentabilidadPotrero
+from app.services.rentabilidad import invalidar_cache_potrero
 
 router = APIRouter(prefix="/potreros", tags=["potreros"])
 
@@ -247,6 +248,7 @@ async def update_potrero(
         potrero.kg_producidos_anio = payload.kg_producidos_anio
 
     await db.commit()
+    await invalidar_cache_potrero(potrero_id, db)
     await db.refresh(potrero)
     return _potrero_to_read(potrero)
 

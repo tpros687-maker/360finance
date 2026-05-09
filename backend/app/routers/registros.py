@@ -30,6 +30,7 @@ from app.schemas.registro import (
     ResumenResponse,
 )
 from app.services.asistente import _get_client as _groq_client
+from app.services.rentabilidad import invalidar_cache_potrero
 
 router = APIRouter(prefix="/registros", tags=["registros"])
 
@@ -348,9 +349,14 @@ async def create_registro(
         fecha=payload.fecha,
         descripcion=payload.descripcion,
         comprobante_url=payload.comprobante_url,
+        tipo_imputacion=payload.tipo_imputacion,
+        actividad_tipo=payload.actividad_tipo,
+        actividad_id=payload.actividad_id,
     )
     db.add(registro)
     await db.commit()
+    if payload.potrero_id is not None:
+        await invalidar_cache_potrero(payload.potrero_id, db)
     await db.refresh(registro)
     result = await db.execute(select(Registro).where(Registro.id == registro.id))
     return result.scalar_one()
@@ -452,6 +458,7 @@ async def update_registro(
     db: AsyncSession = Depends(get_db),
 ) -> Registro:
     registro = await _get_own_registro(registro_id, current_user.id, db)
+    old_potrero_id = registro.potrero_id
 
     if payload.categoria_id is not None:
         await _assert_categoria_accessible(payload.categoria_id, current_user.id, db)
@@ -473,8 +480,16 @@ async def update_registro(
         if payload.potrero_id is not None:
             await _assert_potrero_accessible(payload.potrero_id, current_user.id, db)
         registro.potrero_id = payload.potrero_id
+    if "tipo_imputacion" in payload.model_fields_set:
+        registro.tipo_imputacion = payload.tipo_imputacion
+    if "actividad_tipo" in payload.model_fields_set:
+        registro.actividad_tipo = payload.actividad_tipo
+    if "actividad_id" in payload.model_fields_set:
+        registro.actividad_id = payload.actividad_id
 
     await db.commit()
+    for pid in {p for p in [old_potrero_id, registro.potrero_id] if p is not None}:
+        await invalidar_cache_potrero(pid, db)
     result = await db.execute(select(Registro).where(Registro.id == registro.id))
     return result.scalar_one()
 
@@ -516,8 +531,11 @@ async def delete_registro(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     registro = await _get_own_registro(registro_id, current_user.id, db)
+    potrero_id = registro.potrero_id
     await db.delete(registro)
     await db.commit()
+    if potrero_id is not None:
+        await invalidar_cache_potrero(potrero_id, db)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

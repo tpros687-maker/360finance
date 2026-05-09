@@ -12,6 +12,7 @@ from app.deps import get_current_user
 from app.models.mapa import Potrero
 from app.models.produccion import CicloAgricola, EventoReproductivo, LoteGanado
 from app.models.user import User
+from app.services.rentabilidad import invalidar_cache_potrero
 
 router = APIRouter(prefix="/produccion", tags=["produccion"])
 
@@ -188,6 +189,7 @@ async def create_lote(potrero_id: int, payload: LoteCreate, current_user: User =
     lote = LoteGanado(user_id=current_user.id, potrero_id=potrero_id, **payload.model_dump(exclude={"potrero_id"}))
     db.add(lote)
     await db.commit()
+    await invalidar_cache_potrero(potrero_id, db)
     await db.refresh(lote)
     return _lote_to_read(lote)
 
@@ -200,6 +202,7 @@ async def update_lote(lote_id: int, payload: LoteUpdate, current_user: User = De
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(lote, k, v)
     await db.commit()
+    await invalidar_cache_potrero(lote.potrero_id, db)
     await db.refresh(lote)
     return _lote_to_read(lote)
 
@@ -209,8 +212,10 @@ async def delete_lote(lote_id: int, current_user: User = Depends(get_current_use
     lote = r.scalar_one_or_none()
     if lote is None or lote.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Lote no encontrado")
+    potrero_id = lote.potrero_id
     await db.delete(lote)
     await db.commit()
+    await invalidar_cache_potrero(potrero_id, db)
 
 
 # ── Eventos reproductivos ─────────────────────────────────────────────────────
@@ -255,6 +260,7 @@ async def create_ciclo(potrero_id: int, payload: CicloCreate, current_user: User
     ciclo = CicloAgricola(user_id=current_user.id, potrero_id=potrero_id, **payload.model_dump(exclude={"potrero_id"}))
     db.add(ciclo)
     await db.commit()
+    await invalidar_cache_potrero(potrero_id, db)
     await db.refresh(ciclo)
     ha = float(potrero.hectareas) if potrero.hectareas else None
     return _ciclo_to_read(ciclo, ha)
@@ -270,6 +276,7 @@ async def update_ciclo(ciclo_id: int, payload: CicloUpdate, current_user: User =
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(ciclo, k, v)
     await db.commit()
+    await invalidar_cache_potrero(ciclo.potrero_id, db)
     await db.refresh(ciclo)
     ha = float(potrero.hectareas) if potrero and potrero.hectareas else None
     return _ciclo_to_read(ciclo, ha)
@@ -280,5 +287,7 @@ async def delete_ciclo(ciclo_id: int, current_user: User = Depends(get_current_u
     ciclo = r.scalar_one_or_none()
     if ciclo is None or ciclo.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Ciclo no encontrado")
+    potrero_id = ciclo.potrero_id
     await db.delete(ciclo)
     await db.commit()
+    await invalidar_cache_potrero(potrero_id, db)

@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+import json
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.categoria import TipoMovimiento
 from app.models.mapa import Potrero
 from app.models.produccion import CicloAgricola, LoteGanado
-from app.models.referencia import CotizacionDiaria
+from app.models.referencia import CotizacionDiaria, RentabilidadCache
 from app.models.registro import Registro
 
 USD_UYU_FALLBACK = Decimal("40.0")
@@ -200,6 +201,22 @@ async def calcular_gastos_potrero(
     return directos, prorrateados, estructurales
 
 
+_CACHE_TTL_HOURS = 6
+
+
+async def invalidar_cache_potrero(potrero_id: int, db: AsyncSession) -> None:
+    """Marca como inválidos todos los registros de cache del potrero."""
+    cache_res = await db.execute(
+        select(RentabilidadCache).where(
+            RentabilidadCache.potrero_id == potrero_id,
+            RentabilidadCache.valido == True,  # noqa: E712
+        )
+    )
+    for entry in cache_res.scalars().all():
+        entry.valido = False
+    await db.commit()
+
+
 async def calcular_rentabilidad_potrero(
     potrero_id: int,
     periodo_desde: Optional[date],
@@ -208,6 +225,24 @@ async def calcular_rentabilidad_potrero(
     db: AsyncSession,
 ) -> "PotreroRentabilidad":
     hoy = date.today()
+    fecha_desde_key = periodo_desde or date(hoy.year, 1, 1)
+    fecha_hasta_key = periodo_hasta or hoy
+
+    # ── Cache lookup ──────────────────────────────────────────────────────────
+    ttl_cutoff = datetime.now(timezone.utc) - timedelta(hours=_CACHE_TTL_HOURS)
+    cache_res = await db.execute(
+        select(RentabilidadCache).where(
+            RentabilidadCache.potrero_id == potrero_id,
+            RentabilidadCache.user_id == user_id,
+            RentabilidadCache.periodo_desde == fecha_desde_key,
+            RentabilidadCache.periodo_hasta == fecha_hasta_key,
+            RentabilidadCache.valido == True,  # noqa: E712
+            RentabilidadCache.calculado_at >= ttl_cutoff,
+        )
+    )
+    cached = cache_res.scalar_one_or_none()
+    if cached is not None:
+        return PotreroRentabilidad.model_validate_json(cached.resultado_json)
 
     res = await db.execute(
         select(Potrero).where(Potrero.id == potrero_id, Potrero.user_id == user_id)
@@ -330,7 +365,7 @@ async def calcular_rentabilidad_potrero(
         if margen_neto_ha is not None else None
     )
 
-    return PotreroRentabilidad(
+    resultado = PotreroRentabilidad(
         potrero_id=potrero_id,
         nombre=potrero.nombre,
         hectareas=ha_potrero,
@@ -342,6 +377,38 @@ async def calcular_rentabilidad_potrero(
         margen_neto_ha_anualizado_usd=margen_neto_ha_anualizado,
         es_proyectado=any_proyectado,
     )
+
+    # ── Cache write-back ─────────────────────────────────────────────────────
+    try:
+        existing_res = await db.execute(
+            select(RentabilidadCache).where(
+                RentabilidadCache.potrero_id == potrero_id,
+                RentabilidadCache.user_id == user_id,
+                RentabilidadCache.periodo_desde == fecha_desde_key,
+                RentabilidadCache.periodo_hasta == fecha_hasta_key,
+            )
+        )
+        existing = existing_res.scalar_one_or_none()
+        json_str = resultado.model_dump_json()
+        if existing is not None:
+            existing.resultado_json = json_str
+            existing.calculado_at = datetime.now(timezone.utc)
+            existing.valido = True
+        else:
+            db.add(RentabilidadCache(
+                user_id=user_id,
+                potrero_id=potrero_id,
+                periodo_desde=fecha_desde_key,
+                periodo_hasta=fecha_hasta_key,
+                resultado_json=json_str,
+                calculado_at=datetime.now(timezone.utc),
+                valido=True,
+            ))
+        await db.commit()
+    except Exception:
+        pass  # cache failure is non-fatal
+
+    return resultado
 
 
 class EscenarioProyeccion(BaseModel):

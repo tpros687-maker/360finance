@@ -1,9 +1,10 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
 
 from app.database import Base
 
@@ -31,3 +32,28 @@ class CotizacionDiaria(Base):
     usd_uyu: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
     usd_ars: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)
     fuente: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+
+class RentabilidadCache(Base):
+    __tablename__ = "rentabilidad_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "potrero_id", "periodo_desde", "periodo_hasta",
+            name="uq_rent_cache",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    potrero_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("potreros.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    periodo_desde: Mapped[date] = mapped_column(Date, nullable=False)
+    periodo_hasta: Mapped[date] = mapped_column(Date, nullable=False)
+    resultado_json: Mapped[str] = mapped_column(Text, nullable=False)
+    calculado_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    valido: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
