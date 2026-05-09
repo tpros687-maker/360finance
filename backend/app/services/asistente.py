@@ -15,15 +15,103 @@ from app.models.mapa import Animal, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
 from app.schemas.asistente import MensajeChat
+from app.services.rentabilidad import calcular_proyeccion_anual, calcular_rentabilidad_potrero
 
 SYSTEM_PROMPT = (
-    "Sos un asistente agropecuario experto en ganadería, agricultura y gestión de campo "
-    "para Uruguay y Argentina. Tenés acceso a los datos reales del productor que se te "
-    "proporcionan como contexto. Respondé siempre en español, de forma clara y práctica. "
-    "Cuando el productor te pregunte sobre sus datos, utilizá la información del contexto "
-    "para dar respuestas precisas y útiles. Si no tenés información suficiente para responder "
-    "algo específico, indicalo claramente."
+    "Sos un asesor financiero rural y agrónomo experto en ganadería, agricultura y gestión "
+    "de campo para Uruguay y Argentina. Hablás en español rioplatense, de forma directa y sin rodeos. "
+    "Tus respuestas son cortas, accionables y van al grano — si hay un problema lo decís claro, "
+    "si hay una oportunidad la señalás con números concretos. "
+    "\n\n"
+    "Tenés acceso a los datos reales del productor: registros financieros, estado de cada potrero, "
+    "rentabilidad por potrero y actividad (margen neto/ha/año), semáforo de rentabilidad "
+    "(🟢 verde ≥ USD 150/ha, 🟡 amarillo USD 80-150/ha, 🔴 rojo < USD 80/ha), "
+    "y proyección al cierre del año en tres escenarios (pesimista, base, optimista). "
+    "\n\n"
+    "Podés responder preguntas como: "
+    "'¿Cuál es mi potrero más rentable?', "
+    "'¿Por qué el potrero X tiene semáforo rojo?', "
+    "'¿Cómo voy a cerrar el año?', "
+    "'¿Cuánto perdí en el potrero X este mes?', "
+    "'¿Qué actividad me conviene más: ganadería o agricultura?'. "
+    "\n\n"
+    "Cuando el productor pregunta algo sobre sus datos, usá la información del contexto para "
+    "dar respuestas precisas con los números reales. Si los datos son proyectados o parciales, "
+    "aclaralo. Si no tenés información suficiente, decilo directo."
 )
+
+
+def _semaforo(val: "Decimal | None") -> str:
+    if val is None:
+        return "⬜ sin datos"
+    if val >= 150:
+        return "🟢 verde"
+    if val >= 80:
+        return "🟡 amarillo"
+    return "🔴 rojo"
+
+
+async def _contexto_rentabilidad(user: User, db: AsyncSession) -> str:
+    """Agrega rentabilidad por potrero y proyección anual al contexto del asistente."""
+    hoy = date.today()
+    inicio_anio = date(hoy.year, 1, 1)
+
+    lineas: list[str] = ["", "=== RENTABILIDAD POR POTRERO (año en curso) ==="]
+
+    pot_res = await db.execute(select(Potrero).where(Potrero.user_id == user.id))
+    potreros = pot_res.scalars().all()
+
+    for potrero in potreros:
+        try:
+            r = await calcular_rentabilidad_potrero(
+                potrero_id=potrero.id,
+                periodo_desde=inicio_anio,
+                periodo_hasta=hoy,
+                user_id=user.id,
+                db=db,
+            )
+            sem = _semaforo(r.margen_neto_ha_anualizado_usd)
+            acts = ", ".join(a.nombre for a in r.actividades) or "sin actividades registradas"
+            margen_ha = f"${r.margen_neto_ha_anualizado_usd:,.0f}" if r.margen_neto_ha_anualizado_usd is not None else "—"
+            lineas.append(
+                f"  • {r.nombre} {sem}: MB/ha/año={margen_ha} USD, "
+                f"margen total=${r.margen_neto_usd:,.0f} USD"
+                + (", datos parciales/proyectados" if r.es_proyectado else "")
+            )
+            lineas.append(f"    Actividades: {acts}")
+            lineas.append(
+                f"    Gastos prorrateados: ${r.gastos_prorrateados_usd:,.0f} USD, "
+                f"estructurales: ${r.gastos_estructurales_usd:,.0f} USD"
+            )
+        except Exception:
+            continue
+
+    if len(lineas) == 2:
+        lineas.append("  • Sin datos de rentabilidad disponibles para el año en curso")
+
+    try:
+        proy = await calcular_proyeccion_anual(user_id=user.id, db=db)
+        lineas += [
+            "",
+            "=== PROYECCIÓN AL CIERRE DEL AÑO ===",
+            f"  Basado en {proy.periodo_analizado_dias} días de datos reales",
+            (
+                f"  Pesimista: margen ${proy.pesimista.margen_usd:,.0f} USD"
+                + (f" · ${proy.pesimista.margen_ha_usd:,.0f}/ha" if proy.pesimista.margen_ha_usd else "")
+            ),
+            (
+                f"  Base:      margen ${proy.base.margen_usd:,.0f} USD"
+                + (f" · ${proy.base.margen_ha_usd:,.0f}/ha" if proy.base.margen_ha_usd else "")
+            ),
+            (
+                f"  Optimista: margen ${proy.optimista.margen_usd:,.0f} USD"
+                + (f" · ${proy.optimista.margen_ha_usd:,.0f}/ha" if proy.optimista.margen_ha_usd else "")
+            ),
+        ]
+    except Exception:
+        pass
+
+    return "\n".join(lineas)
 
 
 def _get_client() -> Groq:
@@ -349,6 +437,13 @@ async def construir_contexto(user: User, db: AsyncSession) -> str:
             lineas.append(f"  ⚠ {a}")
     else:
         lineas.append("  • Sin alertas activas")
+
+    # ── Rentabilidad y proyección ─────────────────────────────────────────────
+    try:
+        rent_ctx = await _contexto_rentabilidad(user, db)
+        lineas.append(rent_ctx)
+    except Exception:
+        pass
 
     return "\n".join(lineas)
 
