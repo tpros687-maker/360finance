@@ -78,3 +78,15 @@ app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/debug/cotizaciones")
+async def debug_cotizaciones():
+    from sqlalchemy import text
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("SELECT id, fecha::text, usd_uyu::text, fuente, calculado_at::text FROM cotizaciones_diarias ORDER BY fecha DESC LIMIT 5")
+        )
+        rows = [dict(r._mapping) for r in result.all()]
+    return rows
