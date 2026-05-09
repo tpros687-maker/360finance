@@ -86,7 +86,7 @@ async def debug_cotizaciones():
     from app.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            text("SELECT id, fecha::text, usd_uyu::text, fuente, calculado_at::text FROM cotizaciones_diarias ORDER BY fecha DESC LIMIT 5")
+            text("SELECT id, fecha::text, usd_uyu::text, usd_ars::text, fuente FROM cotizaciones_diarias ORDER BY fecha DESC LIMIT 5")
         )
         rows = [dict(r._mapping) for r in result.all()]
     return rows
