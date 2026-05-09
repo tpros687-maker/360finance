@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import { api } from "./axios";
 import type {
   GastoResumen,
   ImputacionSugerida,
@@ -62,3 +63,30 @@ export const reimputarGasto = (
     method: "PATCH",
     body: JSON.stringify(body),
   });
+
+export const exportarRentabilidadPDF = async (params: {
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  potrero_id?: number;
+}): Promise<void> => {
+  const qs = new URLSearchParams();
+  if (params.fecha_desde) qs.set("fecha_desde", params.fecha_desde);
+  if (params.fecha_hasta) qs.set("fecha_hasta", params.fecha_hasta);
+  if (params.potrero_id != null) qs.set("potrero_id", String(params.potrero_id));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+
+  const res = await api.get(`/rentabilidad/exportar-pdf${suffix}`, {
+    responseType: "blob",
+  });
+
+  const disposition = res.headers["content-disposition"] as string | undefined;
+  const match = disposition?.match(/filename=([^;]+)/);
+  const filename = match ? match[1].trim() : "rentabilidad.pdf";
+
+  const href = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(href);
+};

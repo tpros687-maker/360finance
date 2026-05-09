@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, BarChart2, Leaf, Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { TrendingUp, TrendingDown, BarChart2, Leaf, Plus, ChevronDown, ChevronUp, FileDown, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getRentabilidadPotreros } from "@/lib/potrerosApi";
+import { exportarRentabilidadPDF } from "@/lib/rentabilidadApi";
 import { getCategorias, createCategoria } from "@/lib/categoriasApi";
 import { createRegistro } from "@/lib/registrosApi";
 import { useAuthStore } from "@/store/authStore";
@@ -324,6 +325,7 @@ export default function RentabilidadPage() {
   const [fechaHasta, setFechaHasta] = useState("");
   const [modalPotrero, setModalPotrero] = useState<{ id: number; nombre: string } | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data = [], isLoading } = useQuery<RentabilidadPotrero[]>({
     queryKey: ["rentabilidad", fechaDesde, fechaHasta],
@@ -348,6 +350,20 @@ export default function RentabilidadPage() {
     placeholderData: (prev) => prev,
   });
 
+  const handleExportPdf = async () => {
+    setIsExporting(true);
+    try {
+      await exportarRentabilidadPDF({
+        fecha_desde: fechaDesde || undefined,
+        fecha_hasta: fechaHasta || undefined,
+      });
+    } catch {
+      toast({ title: "Error al generar el PDF", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (isLoading) return <PageSkeleton />;
 
   const totalIngresos = data.reduce((s, r) => s + r.total_ingresos, 0);
@@ -360,11 +376,26 @@ export default function RentabilidadPage() {
   return (
     <div className="p-6 space-y-6 page-fade">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-agro-text">Rentabilidad por Potrero</h1>
-        <p className="text-agro-muted text-sm mt-1">
-          Análisis de ingresos y gastos asociados a cada potrero.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-agro-text">Rentabilidad por Potrero</h1>
+          <p className="text-agro-muted text-sm mt-1">
+            Análisis de ingresos y gastos asociados a cada potrero.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isExporting}
+          onClick={handleExportPdf}
+          className="shrink-0 border-agro-accent/30 text-agro-muted hover:text-agro-text gap-2"
+        >
+          {isExporting
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <FileDown className="h-4 w-4" />
+          }
+          {isExporting ? "Generando…" : "Exportar PDF"}
+        </Button>
       </div>
 
       {/* Filtros de fecha */}
