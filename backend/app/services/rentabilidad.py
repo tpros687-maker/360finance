@@ -3,13 +3,14 @@ from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.categoria import TipoMovimiento
+from app.models.mapa import Potrero
 from app.models.produccion import CicloAgricola, LoteGanado
 from app.models.referencia import CotizacionDiaria
 from app.models.registro import Registro
-from app.models.categoria import TipoMovimiento
 
 USD_UYU_FALLBACK = Decimal("40.0")
 
@@ -96,6 +97,107 @@ async def calcular_ingresos_actividad(
         return Decimal("0"), abierto
 
     return Decimal("0"), False
+
+
+async def calcular_gastos_potrero(
+    potrero_id: int,
+    periodo_desde: Optional[date],
+    periodo_hasta: Optional[date],
+    total_ha_establecimiento: Decimal,
+    db: AsyncSession,
+) -> tuple[Decimal, Decimal, Decimal]:
+    """Devuelve (directos_usd, prorrateados_usd, estructurales_usd)."""
+    res = await db.execute(select(Potrero).where(Potrero.id == potrero_id))
+    potrero = res.scalar_one_or_none()
+    ha_potrero = Decimal(str(potrero.hectareas)) if potrero and potrero.hectareas else Decimal("0")
+
+    fraccion = (
+        (ha_potrero / total_ha_establecimiento).quantize(Decimal("0.000001"))
+        if total_ha_establecimiento > 0
+        else Decimal("0")
+    )
+
+    # Lotes y ciclos del potrero para capturar gastos imputados a actividades
+    lotes_res = await db.execute(
+        select(LoteGanado.id).where(LoteGanado.potrero_id == potrero_id)
+    )
+    lote_ids = [r for (r,) in lotes_res.all()]
+
+    ciclos_res = await db.execute(
+        select(CicloAgricola.id).where(CicloAgricola.potrero_id == potrero_id)
+    )
+    ciclo_ids = [r for (r,) in ciclos_res.all()]
+
+    # Filtros de período
+    filtros_base = [Registro.tipo == TipoMovimiento.gasto]
+    if periodo_desde:
+        filtros_base.append(Registro.fecha >= periodo_desde)
+    if periodo_hasta:
+        filtros_base.append(Registro.fecha <= periodo_hasta)
+
+    cond_directo_potrero = and_(
+        Registro.potrero_id == potrero_id,
+        Registro.actividad_tipo.is_(None),
+        *filtros_base,
+    )
+    cond_lotes = and_(
+        Registro.actividad_tipo == "lote",
+        Registro.actividad_id.in_(lote_ids) if lote_ids else Registro.actividad_id.is_(None),
+        *filtros_base,
+    )
+    cond_ciclos = and_(
+        Registro.actividad_tipo == "ciclo",
+        Registro.actividad_id.in_(ciclo_ids) if ciclo_ids else Registro.actividad_id.is_(None),
+        *filtros_base,
+    )
+
+    # Gastos de prorrateo/estructural (nivel establecimiento, sin potrero_id específico)
+    cond_shared = and_(
+        Registro.tipo_imputacion.in_(["prorrateo", "estructural"]),
+        Registro.potrero_id.is_(None),
+        *filtros_base,
+    )
+
+    # Gastos sin imputar a nivel establecimiento
+    cond_sin_imputar = and_(
+        Registro.tipo_imputacion.is_(None),
+        Registro.potrero_id.is_(None),
+        Registro.actividad_tipo.is_(None),
+        *filtros_base,
+    )
+
+    stmt_potrero = select(Registro).where(or_(cond_directo_potrero, cond_lotes, cond_ciclos) if (lote_ids or ciclo_ids) else cond_directo_potrero)
+    stmt_shared = select(Registro).where(or_(cond_shared, cond_sin_imputar))
+
+    pot_res = await db.execute(stmt_potrero)
+    registros_potrero = pot_res.scalars().all()
+
+    sh_res = await db.execute(stmt_shared)
+    registros_shared = sh_res.scalars().all()
+
+    directos = Decimal("0")
+    prorrateados = Decimal("0")
+    estructurales = Decimal("0")
+
+    for reg in registros_potrero:
+        usd = await convertir_a_usd(Decimal(str(reg.monto)), reg.moneda, reg.fecha, db)
+        imputacion = reg.tipo_imputacion or "directo"
+        if imputacion == "directo":
+            directos += usd
+        elif imputacion == "prorrateo":
+            prorrateados += (usd * fraccion).quantize(Decimal("0.01"))
+        else:
+            estructurales += (usd * fraccion).quantize(Decimal("0.01"))
+
+    for reg in registros_shared:
+        usd = await convertir_a_usd(Decimal(str(reg.monto)), reg.moneda, reg.fecha, db)
+        imputacion = reg.tipo_imputacion
+        if imputacion == "prorrateo":
+            prorrateados += (usd * fraccion).quantize(Decimal("0.01"))
+        else:
+            estructurales += (usd * fraccion).quantize(Decimal("0.01"))
+
+    return directos, prorrateados, estructurales
 
 
 class ActividadRentabilidad(BaseModel):
