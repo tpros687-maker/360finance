@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.mapa import Potrero
-from app.models.produccion import CicloAgricola, EventoReproductivo, LoteGanado
+from app.models.produccion import CicloAgricola, EventoReproductivo, Lote
 from app.models.user import User
 from app.services.rentabilidad import invalidar_cache_potrero
 
@@ -18,37 +18,6 @@ router = APIRouter(prefix="/produccion", tags=["produccion"])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
-
-class LoteCreate(BaseModel):
-    potrero_id: int
-    especie: str
-    cantidad: int
-    fecha_entrada: date
-    peso_entrada_kg: float
-    fecha_salida: Optional[date] = None
-    peso_salida_kg: Optional[float] = None
-    notas: Optional[str] = None
-
-class LoteUpdate(BaseModel):
-    fecha_salida: Optional[date] = None
-    peso_salida_kg: Optional[float] = None
-    notas: Optional[str] = None
-
-class LoteRead(BaseModel):
-    id: int
-    potrero_id: int
-    especie: str
-    cantidad: int
-    fecha_entrada: date
-    peso_entrada_kg: float
-    fecha_salida: Optional[date]
-    peso_salida_kg: Optional[float]
-    notas: Optional[str]
-    dias_en_potrero: Optional[int]
-    kg_producidos: Optional[float]
-    gdp_kg_dia: Optional[float]
-
-    model_config = {"from_attributes": True}
 
 class EventoCreate(BaseModel):
     potrero_id: int
@@ -115,30 +84,6 @@ async def _get_potrero(potrero_id: int, user_id: int, db: AsyncSession) -> Potre
         raise HTTPException(status_code=403, detail="Sin permisos")
     return p
 
-def _lote_to_read(l: LoteGanado) -> LoteRead:
-    dias = None
-    kg_prod = None
-    gdp = None
-    if l.fecha_salida and l.peso_salida_kg is not None:
-        dias = (l.fecha_salida - l.fecha_entrada).days
-        kg_prod = float(l.peso_salida_kg) - float(l.peso_entrada_kg)
-        if dias > 0 and l.cantidad > 0:
-            gdp = kg_prod / dias / l.cantidad
-    return LoteRead(
-        id=l.id,
-        potrero_id=l.potrero_id,
-        especie=l.especie,
-        cantidad=l.cantidad,
-        fecha_entrada=l.fecha_entrada,
-        peso_entrada_kg=float(l.peso_entrada_kg),
-        fecha_salida=l.fecha_salida,
-        peso_salida_kg=float(l.peso_salida_kg) if l.peso_salida_kg is not None else None,
-        notas=l.notas,
-        dias_en_potrero=dias,
-        kg_producidos=kg_prod,
-        gdp_kg_dia=round(gdp, 3) if gdp is not None else None,
-    )
-
 def _evento_to_read(e: EventoReproductivo) -> EventoRead:
     tasa = (e.resultado / e.vientres_totales * 100) if e.vientres_totales > 0 else 0.0
     return EventoRead(
@@ -173,49 +118,6 @@ def _ciclo_to_read(c: CicloAgricola, ha: float | None) -> CicloRead:
         rinde_tn_ha=round(rinde, 3) if rinde is not None else None,
         ingreso_bruto=round(ingreso, 2) if ingreso is not None else None,
     )
-
-
-# ── Lotes de ganado ───────────────────────────────────────────────────────────
-
-@router.get("/potreros/{potrero_id}/lotes", response_model=list[LoteRead])
-async def list_lotes(potrero_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await _get_potrero(potrero_id, current_user.id, db)
-    r = await db.execute(select(LoteGanado).where(LoteGanado.potrero_id == potrero_id).order_by(LoteGanado.fecha_entrada.desc()))
-    return [_lote_to_read(l) for l in r.scalars().all()]
-
-@router.post("/potreros/{potrero_id}/lotes", response_model=LoteRead, status_code=201)
-async def create_lote(potrero_id: int, payload: LoteCreate, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await _get_potrero(potrero_id, current_user.id, db)
-    lote = LoteGanado(user_id=current_user.id, potrero_id=potrero_id, **payload.model_dump(exclude={"potrero_id"}))
-    db.add(lote)
-    await db.commit()
-    await invalidar_cache_potrero(potrero_id, db)
-    await db.refresh(lote)
-    return _lote_to_read(lote)
-
-@router.put("/lotes/{lote_id}", response_model=LoteRead)
-async def update_lote(lote_id: int, payload: LoteUpdate, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(LoteGanado).where(LoteGanado.id == lote_id))
-    lote = r.scalar_one_or_none()
-    if lote is None or lote.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Lote no encontrado")
-    for k, v in payload.model_dump(exclude_none=True).items():
-        setattr(lote, k, v)
-    await db.commit()
-    await invalidar_cache_potrero(lote.potrero_id, db)
-    await db.refresh(lote)
-    return _lote_to_read(lote)
-
-@router.delete("/lotes/{lote_id}", status_code=204)
-async def delete_lote(lote_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(LoteGanado).where(LoteGanado.id == lote_id))
-    lote = r.scalar_one_or_none()
-    if lote is None or lote.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Lote no encontrado")
-    potrero_id = lote.potrero_id
-    await db.delete(lote)
-    await db.commit()
-    await invalidar_cache_potrero(potrero_id, db)
 
 
 # ── Eventos reproductivos ─────────────────────────────────────────────────────

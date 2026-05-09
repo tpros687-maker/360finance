@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.categoria import TipoMovimiento
 from app.models.mapa import Potrero
-from app.models.produccion import CicloAgricola, LoteGanado
+from app.models.produccion import CicloAgricola, Lote
 from app.models.referencia import CotizacionDiaria, RentabilidadCache
 from app.models.registro import Registro
 
@@ -48,12 +48,12 @@ async def calcular_ingresos_actividad(
     hoy = date.today()
 
     if actividad_tipo == "lote":
-        res = await db.execute(select(LoteGanado).where(LoteGanado.id == actividad_id))
+        res = await db.execute(select(Lote).where(Lote.id == actividad_id))
         lote = res.scalar_one_or_none()
         if lote is None:
             return Decimal("0"), False
 
-        abierto = lote.fecha_salida is None or lote.peso_salida_kg is None
+        abierto = not lote.cerrado
 
         # Busca registro de ingreso imputado a este lote para obtener monto y moneda reales
         reg_res = await db.execute(
@@ -71,14 +71,7 @@ async def calcular_ingresos_actividad(
             )
             return ingresos_usd, abierto
 
-        # Sin registro: estima por kg producidos si tiene salida
-        if not abierto:
-            kg = Decimal(str(lote.peso_salida_kg)) - Decimal(str(lote.peso_entrada_kg))
-            # Precio estimado: USD 2.20/kg (novillo tipo exportación, referencia)
-            ingresos_usd = (kg * Decimal("2.20")).quantize(Decimal("0.01"))
-            return ingresos_usd, True  # proyectado porque no hay registro real
-
-        return Decimal("0"), True
+        return Decimal("0"), abierto
 
     if actividad_tipo == "ciclo":
         res = await db.execute(select(CicloAgricola).where(CicloAgricola.id == actividad_id))
@@ -120,7 +113,7 @@ async def calcular_gastos_potrero(
 
     # Lotes y ciclos del potrero para capturar gastos imputados a actividades
     lotes_res = await db.execute(
-        select(LoteGanado.id).where(LoteGanado.potrero_id == potrero_id)
+        select(Lote.id).where(Lote.potrero_id == potrero_id)
     )
     lote_ids = [r for (r,) in lotes_res.all()]
 
@@ -268,11 +261,11 @@ async def calcular_rentabilidad_potrero(
     dias_periodo = max((fecha_hasta - fecha_desde).days, 1)
 
     # Actividades del potrero en el período
-    lote_stmt = select(LoteGanado).where(LoteGanado.potrero_id == potrero_id)
+    lote_stmt = select(Lote).where(Lote.potrero_id == potrero_id)
     if periodo_desde:
-        lote_stmt = lote_stmt.where(LoteGanado.fecha_entrada >= periodo_desde)
+        lote_stmt = lote_stmt.where(Lote.fecha_entrada >= periodo_desde)
     if periodo_hasta:
-        lote_stmt = lote_stmt.where(LoteGanado.fecha_entrada <= periodo_hasta)
+        lote_stmt = lote_stmt.where(Lote.fecha_entrada <= periodo_hasta)
     lotes = (await db.execute(lote_stmt)).scalars().all()
 
     ciclo_stmt = select(CicloAgricola).where(CicloAgricola.potrero_id == potrero_id)
@@ -307,8 +300,7 @@ async def calcular_rentabilidad_potrero(
         gastos_d = await gastos_directos_actividad("lote", lote.id)
         margen = ingresos - gastos_d
         margen_ha = (margen / ha_potrero).quantize(Decimal("0.01")) if ha_potrero else None
-        f_out = lote.fecha_salida or hoy
-        dias_lote = max((f_out - lote.fecha_entrada).days, 1)
+        dias_lote = max((hoy - lote.fecha_entrada).days, 1)
         anualizado = (
             (margen_ha * Decimal("365") / Decimal(str(dias_lote))).quantize(Decimal("0.01"))
             if margen_ha is not None else None
@@ -319,7 +311,7 @@ async def calcular_rentabilidad_potrero(
         actividades.append(ActividadRentabilidad(
             actividad_tipo="lote",
             actividad_id=lote.id,
-            nombre=lote.nombre or f"Lote #{lote.id}",
+            nombre=lote.categoria or f"Lote #{lote.id}",
             ingresos_usd=ingresos,
             gastos_directos_usd=gastos_d,
             margen_usd=margen,
@@ -467,10 +459,10 @@ async def calcular_proyeccion_anual(
                 continue
             if act.actividad_tipo == "lote":
                 lote_res = await db.execute(
-                    select(LoteGanado).where(LoteGanado.id == act.actividad_id)
+                    select(Lote).where(Lote.id == act.actividad_id)
                 )
                 lote = lote_res.scalar_one_or_none()
-                if lote and lote.peso_entrada_kg and lote.cantidad:
+                if lote and lote.peso_total_entrada_kg and lote.cantidad:
                     # Assume 200 kg gain per head at USD 2.20/kg (novillo exportación)
                     ingreso_estimado = (
                         Decimal("200") * Decimal(str(lote.cantidad)) * Decimal("2.20")
