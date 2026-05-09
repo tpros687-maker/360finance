@@ -23,6 +23,7 @@ from app.routers.productos import router as productos_router
 from app.routers.pagos import router as pagos_router
 from app.routers.aplicaciones import router as aplicaciones_router
 from app.routers.produccion import router as produccion_router
+from app.routers.rentabilidad import router as rentabilidad_router
 
 
 @asynccontextmanager
@@ -66,6 +67,7 @@ app.include_router(productos_router)
 app.include_router(pagos_router)
 app.include_router(aplicaciones_router)
 app.include_router(produccion_router)
+app.include_router(rentabilidad_router)
 
 # Serve uploaded files
 _uploads_dir = "/app/uploads"
