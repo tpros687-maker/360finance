@@ -1,7 +1,9 @@
 import { apiFetch } from "./api";
 import type {
+  GastoResumen,
   ImputacionSugerida,
   PotreroRentabilidad,
+  PotreroRentabilidadAnio,
   PotreroRentabilidadDetalle,
   ProyeccionAnual,
   ReimputarGastoBody,
@@ -42,6 +44,15 @@ export const sugerirImputacion = (body: {
     method: "POST",
     body: JSON.stringify(body),
   });
+
+export const getHistoricoRentabilidad = (id: number): Promise<PotreroRentabilidadAnio[]> =>
+  apiFetch(`/rentabilidad/potreros/${id}/historico`);
+
+export const getGastosPotrero = (
+  id: number,
+  params: PeriodoParams = {}
+): Promise<GastoResumen[]> =>
+  apiFetch(`/rentabilidad/potreros/${id}/gastos${buildQuery(params)}`);
 
 export const reimputarGasto = (
   registroId: number,

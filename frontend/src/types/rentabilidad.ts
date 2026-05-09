@@ -47,6 +47,10 @@ export interface PotreroRentabilidadDetalle extends PotreroRentabilidad {
   top_gastos: GastoResumen[];
 }
 
+export interface PotreroRentabilidadAnio extends PotreroRentabilidad {
+  anio: number;
+}
+
 export interface EscenarioProyeccion {
   ingresos_esperados_usd: number;
   gastos_esperados_usd: number;
