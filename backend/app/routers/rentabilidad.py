@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models.categoria import TipoMovimiento
+from app.models.categoria import Categoria, TipoMovimiento
 from app.models.mapa import Potrero
+from app.models.produccion import CicloAgricola, LoteGanado
 from app.models.registro import Registro
 from app.models.user import User
+from app.services.imputacion import sugerir_imputacion
 from app.services.rentabilidad import (
     PotreroRentabilidad,
     calcular_rentabilidad_potrero,
@@ -205,4 +207,60 @@ async def proyeccion_anual(
         pesimista=escenario(Decimal("0.85")),
         base=escenario(Decimal("1")),
         optimista=escenario(Decimal("1.15")),
+    )
+
+
+class SugerirImputacionRequest(BaseModel):
+    categoria_id: int
+    fecha: date
+
+
+class SugerenciaImputacionOut(BaseModel):
+    tipo_imputacion: str
+    actividad_tipo: Optional[str]
+    actividad_id: Optional[int]
+
+
+@router.post("/sugerir-imputacion", response_model=Optional[SugerenciaImputacionOut])
+async def sugerir_imputacion_endpoint(
+    body: SugerirImputacionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    cat_res = await db.execute(select(Categoria).where(Categoria.id == body.categoria_id))
+    categoria = cat_res.scalar_one_or_none()
+    if categoria is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Categoría no encontrada")
+
+    # Potreros del usuario
+    pot_res = await db.execute(
+        select(Potrero.id).where(Potrero.user_id == current_user.id)
+    )
+    potrero_ids = [r for (r,) in pot_res.all()]
+
+    # Lotes activos en la fecha (entrada <= fecha, salida es null o >= fecha)
+    lotes_res = await db.execute(
+        select(LoteGanado.id, LoteGanado.potrero_id).where(
+            LoteGanado.potrero_id.in_(potrero_ids),
+            LoteGanado.fecha_entrada <= body.fecha,
+            (LoteGanado.fecha_salida.is_(None)) | (LoteGanado.fecha_salida >= body.fecha),
+        )
+    )
+    lotes_activos = [(lid, pid) for lid, pid in lotes_res.all()]
+
+    # Ciclos activos en la fecha (siembra <= fecha, cosecha es null o >= fecha)
+    ciclos_res = await db.execute(
+        select(CicloAgricola.id, CicloAgricola.potrero_id).where(
+            CicloAgricola.potrero_id.in_(potrero_ids),
+            CicloAgricola.fecha_siembra <= body.fecha,
+            (CicloAgricola.fecha_cosecha.is_(None)) | (CicloAgricola.fecha_cosecha >= body.fecha),
+        )
+    )
+    ciclos_activos = [(cid, pid) for cid, pid in ciclos_res.all()]
+
+    return sugerir_imputacion(
+        categoria_nombre=categoria.nombre,
+        potreros_activos=potrero_ids,
+        lotes_activos=lotes_activos,
+        ciclos_activos=ciclos_activos,
     )
