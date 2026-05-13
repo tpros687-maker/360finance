@@ -28,7 +28,6 @@ const PagoPage = lazy(() => import("@/pages/PagoPage"));
 const FacturacionPage = lazy(() => import("@/pages/FacturacionPage"));
 const RentabilidadPage = lazy(() => import("@/pages/RentabilidadPage"));
 const RentabilidadHaPage = lazy(() => import("@/pages/RentabilidadHaPage"));
-const ProductividadPage = lazy(() => import("@/pages/ProductividadPage"));
 const RentabilidadPotreroPage = lazy(() => import("@/pages/RentabilidadPotreroPage"));
 const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
@@ -73,7 +72,6 @@ function AppRoutes() {
             <Route path="/rentabilidad" element={<RentabilidadPage />} />
             <Route path="/rentabilidad-ha" element={<RentabilidadHaPage />} />
             <Route path="/rentabilidad-ha/potreros/:id" element={<RentabilidadPotreroPage />} />
-            <Route path="/productividad" element={<ProductividadPage />} />
             <Route path="/flujo-caja" element={<FlujoCajaPage />} />
             <Route path="/alertas" element={<Navigate to="/dashboard" replace />} />
             <Route path="/recomendaciones" element={<RecomendacionesPage />} />
