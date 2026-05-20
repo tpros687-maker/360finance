@@ -1,9 +1,20 @@
+import os
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import List
 
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@db:5432/finance360"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def fix_db_scheme(cls, v: str) -> str:
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        if v.startswith("postgresql://") and "+asyncpg" not in v:
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
     SECRET_KEY: str = "change-this-secret-key-in-production-must-be-32-chars"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
