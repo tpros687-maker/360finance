@@ -192,34 +192,49 @@ async def _procesar_imagen_comprobante(
     user: User,
     db: AsyncSession,
 ) -> str:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            media_url,
-            auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
-        )
-        resp.raise_for_status()
-        image_bytes = resp.content
+    # Descargar imagen — Twilio sandbox requiere autenticación básica
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                media_url,
+                auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
+            )
+            resp.raise_for_status()
+            image_bytes = resp.content
+    except Exception as exc:
+        logger.exception("Error descargando imagen de Twilio: %s", exc)
+        return f"No pude descargar la imagen ({type(exc).__name__}: {exc}). Intentá de nuevo."
+
+    if not image_bytes:
+        return "La imagen llegó vacía. Intentá de nuevo."
 
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     mime = media_content_type or "image/jpeg"
 
-    groq = _groq_client()
-    response = groq.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-                    {"type": "text", "text": _EXTRACCION_PROMPT},
-                ],
-            }
-        ],
-        max_tokens=512,
-        temperature=0.1,
-    )
+    # Groq vision — modelo llama-4-scout
+    try:
+        groq = _groq_client()
+        response = groq.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                        {"type": "text", "text": _EXTRACCION_PROMPT},
+                    ],
+                }
+            ],
+            max_tokens=512,
+            temperature=0.1,
+        )
+    except Exception as exc:
+        logger.exception("Error en Groq vision: %s", exc)
+        return f"Error al analizar la imagen ({type(exc).__name__}: {exc}). Intentá de nuevo."
 
     raw = (response.choices[0].message.content or "").strip()
+    logger.info("Groq vision raw response: %s", raw)
+
     if raw.startswith("```"):
         parts = raw.split("```", 2)
         raw = parts[1]
@@ -230,7 +245,8 @@ async def _procesar_imagen_comprobante(
     try:
         data: dict = json.loads(raw)
     except json.JSONDecodeError:
-        return "No pude leer el comprobante. Registrá el gasto manualmente."
+        logger.error("Groq vision JSON inválido: %s", raw)
+        return f"No pude interpretar el comprobante (respuesta: {raw[:100]}). Registrá el gasto manualmente."
 
     monto = _parse_monto(data.get("monto"))
     if monto is None:
