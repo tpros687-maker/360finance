@@ -275,7 +275,43 @@ async def _procesar_imagen_comprobante(
 
 # ── Comandos rápidos (sin Groq) ───────────────────────────────────────────────
 
-_COMANDOS = {"resumen", "tareas", "gastos", "balance"}
+_COMANDOS = {"resumen", "tareas", "gastos", "balance", "ayuda"}
+
+# Palabras interrogativas en español — si el mensaje empieza con alguna → consulta
+_INTERROGATIVAS = (
+    "qué", "que", "cuánto", "cuanto", "cuánta", "cuanta",
+    "cuántos", "cuantos", "cuántas", "cuantas", "cómo", "como",
+    "cuándo", "cuando", "dónde", "donde", "cuál", "cual",
+    "cuáles", "cuales", "por qué", "por que", "quién", "quien",
+    "puedo", "puedes", "podés", "podes", "tengo", "tienes", "tenés",
+    "hay", "existe", "muéstrame", "muestrame", "dame", "dime",
+    "decime", "mostrame", "explicame", "explicame",
+)
+
+
+def _detectar_tipo_rapido(mensaje: str) -> str | None:
+    """
+    Detecta el tipo de mensaje sin usar Groq.
+    Retorna 'nota', 'tarea' o 'consulta' si hay certeza, None si hay que usar Groq.
+    """
+    lower = mensaje.lower().strip()
+
+    # Prefijos explícitos del usuario
+    if lower.startswith("nota:") or lower.startswith("nota "):
+        return "nota"
+    if lower.startswith("tarea:") or lower.startswith("tarea "):
+        return "tarea"
+
+    # Mensaje con signo de pregunta → siempre consulta
+    if "?" in mensaje:
+        return "consulta"
+
+    # Empieza con palabra interrogativa → consulta
+    for palabra in _INTERROGATIVAS:
+        if lower.startswith(palabra + " ") or lower == palabra:
+            return "consulta"
+
+    return None
 
 
 async def _cmd_tareas(user: User, db: AsyncSession) -> str:
@@ -352,6 +388,31 @@ async def _cmd_balance(user: User, db: AsyncSession) -> str:
     )
 
 
+def _cmd_ayuda() -> str:
+    return (
+        "🌾 *360 Agro Finance — Guía rápida*\n\n"
+        "📋 *Guardar cosas:*\n"
+        "  `nota: <texto>` → guarda una nota\n"
+        "  `tarea: <texto>` → guarda una tarea\n"
+        "  _Ej: nota: revisé el alambrado sur_\n"
+        "  _Ej: tarea: comprar sal mineral el lunes_\n\n"
+        "💰 *Registrar movimientos:*\n"
+        "  _Ej: gasté 1500 en nafta_\n"
+        "  _Ej: vendí 3 novillos en 90000_\n"
+        "  _Ej: Juan me debe 5000_\n"
+        "  _Ej: le pagué al veterinario 8000_\n\n"
+        "❓ *Consultas — escribí tu pregunta:*\n"
+        "  _Ej: cuánto gasté este mes?_\n"
+        "  _Ej: qué tareas tengo pendientes?_\n\n"
+        "📊 *Comandos directos:*\n"
+        "  `resumen` → resumen del día\n"
+        "  `tareas` → tareas pendientes\n"
+        "  `gastos` → gastos del mes\n"
+        "  `balance` → balance del mes\n"
+        "  `ayuda` → este mensaje"
+    )
+
+
 async def _handle_comando(cmd: str, user: User, db: AsyncSession) -> str | None:
     """Devuelve la respuesta si el mensaje es un comando rápido, None si no."""
     if cmd == "resumen":
@@ -362,6 +423,8 @@ async def _handle_comando(cmd: str, user: User, db: AsyncSession) -> str | None:
         return await _cmd_gastos(user, db)
     if cmd == "balance":
         return await _cmd_balance(user, db)
+    if cmd == "ayuda":
+        return _cmd_ayuda()
     return None
 
 
@@ -381,23 +444,29 @@ async def _clasificar(
     cats_ingreso_str = ", ".join(cats_ingreso) if cats_ingreso else "Otros"
 
     system = (
-        "Sos un asistente de campo agrícola. "
-        "El usuario te manda un mensaje por WhatsApp. "
-        "Clasificá en uno de estos tipos: nota, tarea, consulta, gasto, ingreso, cobro, pago, marcar_pagado, marcar_cobrado.\n"
-        "- nota: registra algo que ocurrió o una observación\n"
-        "- tarea: quiere recordar hacer algo (puede incluir fecha futura)\n"
-        "- consulta: hace una pregunta o pide información\n"
-        "- gasto: gastó, pagó, compró o egresó dinero (sin contraparte específica)\n"
-        "- ingreso: cobró, vendió, recibió dinero (sin contraparte específica)\n"
-        "- cobro: alguien le debe dinero — registra cuenta por cobrar a un cliente (NUEVO cobro pendiente)\n"
-        "- pago: debe pagarle a alguien — registra deuda con un proveedor (NUEVA deuda pendiente)\n"
-        "- marcar_pagado: YA pagó algo que estaba pendiente — 'le pagué al veterinario', 'pagué la deuda con AgroInsumos'\n"
-        "- marcar_cobrado: un cliente YA le pagó algo pendiente — 'me pagó Juan', 'cobré la factura de Pedro'\n\n"
-        f"Hoy es {hoy}. Usuario: {nombre_usuario}. Moneda por defecto: {moneda_usuario}.\n\n"
-        f"Categorías de gasto disponibles: {cats_gasto_str}\n"
-        f"Categorías de ingreso disponibles: {cats_ingreso_str}\n\n"
-        "Para gasto/ingreso elegí la categoría más apropiada. Si ninguna encaja, usá 'Otros'.\n"
-        "Para cobro/pago extraé el nombre de la contraparte (cliente o proveedor).\n\n"
+        "Sos un asistente de campo agrícola. El usuario te manda un mensaje por WhatsApp.\n\n"
+        "REGLA PRINCIPAL: Si el mensaje es una PREGUNTA (contiene '?', empieza con 'qué', 'cómo', "
+        "'cuánto', 'cuándo', 'hay', 'puedo', 'tengo', 'dame', 'dime', 'mostrame', etc.) → "
+        "SIEMPRE clasificá como 'consulta'. NUNCA guardes una pregunta como nota o tarea.\n\n"
+        "Tipos disponibles:\n"
+        "- nota: el usuario declara que OCURRIÓ algo o quiere REGISTRAR una observación. "
+        "Ejemplos: 'vacuné los terneros', 'llovió 30mm', 'el toro está cojo'\n"
+        "- tarea: el usuario quiere RECORDAR hacer algo en el futuro. "
+        "Ejemplos: 'llamar al veterinario mañana', 'comprar alambrado el viernes'\n"
+        "- consulta: pregunta, solicitud de información, o cualquier mensaje ambiguo. "
+        "En caso de duda entre nota y consulta → elegí consulta\n"
+        "- gasto: PAGÓ o COMPRÓ algo con monto. Ejemplos: 'gasté 500 en nafta', 'compré hilo 1200'\n"
+        "- ingreso: COBRÓ o VENDIÓ con monto. Ejemplos: 'vendí un novillo en 45000'\n"
+        "- cobro: un cliente le DEBE dinero (cuenta por cobrar nueva). "
+        "Ejemplo: 'Juan me debe 5000'\n"
+        "- pago: él le DEBE a un proveedor (cuenta por pagar nueva). "
+        "Ejemplo: 'debo 8000 a AgroInsumos'\n"
+        "- marcar_pagado: YA pagó una deuda pendiente. Ejemplos: 'le pagué al veterinario', "
+        "'pagué AgroInsumos'\n"
+        "- marcar_cobrado: un cliente YA le pagó. Ejemplos: 'me pagó Juan', 'cobré a Pedro'\n\n"
+        f"Hoy es {hoy}. Usuario: {nombre_usuario}. Moneda: {moneda_usuario}.\n"
+        f"Categorías de gasto: {cats_gasto_str}\n"
+        f"Categorías de ingreso: {cats_ingreso_str}\n\n"
         "Respondé SOLO con JSON válido (sin markdown, sin texto extra):\n"
         '{"tipo": "nota|tarea|consulta|gasto|ingreso|cobro|pago|marcar_pagado|marcar_cobrado", '
         '"texto": "<descripción limpia>", '
@@ -406,9 +475,9 @@ async def _clasificar(
         '"moneda": "<UYU|USD>", '
         '"categoria": "<nombre de la lista o Otros o null>", '
         '"nombre_contraparte": "<nombre del cliente/proveedor o null>", '
-        '"fecha_vencimiento": "<YYYY-MM-DD o null>"}'
-        "\n\nPara gasto/ingreso: fecha es hoy si no se especifica. "
-        "Para cobro/pago: fecha_vencimiento es la fecha límite de pago si se menciona."
+        '"fecha_vencimiento": "<YYYY-MM-DD o null>"}\n\n'
+        "Para gasto/ingreso: fecha es hoy si no se especifica. "
+        "Para cobro/pago: fecha_vencimiento es la fecha límite si se menciona."
     )
 
     response = client.chat.completions.create(
@@ -567,8 +636,40 @@ async def whatsapp_webhook(
             logger.exception("Error en comando rápido '%s': %s", cmd, exc)
             return _twiml("Hubo un error procesando tu consulta. Intentá de nuevo.")
 
+    # Detección rápida sin Groq (prefijos explícitos, preguntas, palabras interrogativas)
+    tipo_rapido = _detectar_tipo_rapido(mensaje)
+    if tipo_rapido == "nota":
+        # Quitar prefijo "nota:" o "nota " del texto
+        texto_nota = mensaje.strip()
+        for prefijo in ("nota:", "nota "):
+            if texto_nota.lower().startswith(prefijo):
+                texto_nota = texto_nota[len(prefijo):].strip()
+                break
+        db.add(NotaCuaderno(user_id=user.id, texto=texto_nota))
+        await db.commit()
+        return _twiml("✅ Nota guardada en tu cuaderno.")
+
+    if tipo_rapido == "tarea":
+        texto_tarea = mensaje.strip()
+        for prefijo in ("tarea:", "tarea "):
+            if texto_tarea.lower().startswith(prefijo):
+                texto_tarea = texto_tarea[len(prefijo):].strip()
+                break
+        db.add(TareaCuaderno(user_id=user.id, texto=texto_tarea))
+        await db.commit()
+        return _twiml("✅ Tarea guardada en tu cuaderno.")
+
     cats_gasto = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
     cats_ingreso = await _cargar_categorias(db, user.id, TipoMovimiento.ingreso)
+
+    # Si es consulta detectada rápido, pasamos directamente a responder sin clasificar
+    if tipo_rapido == "consulta":
+        try:
+            respuesta = await _responder_consulta(mensaje, user, db)
+        except Exception as exc:
+            logger.exception("Error respondiendo consulta WhatsApp: %s", exc)
+            respuesta = "No pude procesar tu consulta. Intentá desde la app."
+        return _twiml(respuesta)
 
     try:
         datos = await _clasificar(
