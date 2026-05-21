@@ -13,9 +13,17 @@ import app.models  # noqa: F401 — register all models
 
 config = context.config
 import os
-db_url = os.environ.get("DATABASE_PUBLIC_URL") or os.environ.get("DATABASE_URL") or settings.DATABASE_URL
-# Convertir postgres:// a postgresql+asyncpg://
-db_url = db_url.replace("postgres://", "postgresql+asyncpg://").replace("postgresql://", "postgresql+asyncpg://")
+
+raw_url = os.environ.get("DATABASE_PUBLIC_URL") or os.environ.get("DATABASE_URL") or settings.DATABASE_URL
+
+# Convertir scheme sin doble reemplazo
+if raw_url.startswith("postgres://"):
+    db_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_url.startswith("postgresql://") and "+asyncpg" not in raw_url:
+    db_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    db_url = raw_url
+
 config.set_main_option("sqlalchemy.url", db_url)
 
 if config.config_file_name is not None:
