@@ -631,6 +631,7 @@ function ResumenTab({ data, moneda }: { data: any; moneda: string }) {
     hayResumen,
     semanas: data.semanas,
   });
+  console.log("semanas:", data.semanas);
   return (
     <div className="space-y-6">
       {data.alerta_liquidez && (
