@@ -18,7 +18,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import LoginRequest, OnboardingRequest, PlanRead, RefreshRequest, TokenPair, UserCreate, UserRead
+from app.schemas.user import LoginRequest, OnboardingRequest, PlanRead, ProfileUpdate, RefreshRequest, TokenPair, UserCreate, UserRead
 
 
 class SSORequest(BaseModel):
@@ -115,6 +115,38 @@ async def plan(current_user: User = Depends(get_current_user)) -> PlanRead:
         trial_fin=current_user.trial_fin,
         **fields,
     )
+
+
+@router.put("/me", response_model=UserRead)
+async def update_me(
+    body: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserRead:
+    if body.email is not None and body.email != current_user.email:
+        existing = await db.execute(select(User).where(User.email == body.email))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El email ya está en uso")
+        current_user.email = body.email
+
+    if body.telefono is not None:
+        tel = body.telefono.strip() or None
+        if tel and tel != current_user.telefono:
+            existing = await db.execute(select(User).where(User.telefono == tel))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El teléfono ya está en uso")
+        current_user.telefono = tel
+
+    if body.nombre is not None:
+        current_user.nombre = body.nombre
+    if body.apellido is not None:
+        current_user.apellido = body.apellido
+
+    await db.commit()
+    await db.refresh(current_user)
+    data = {c.key: getattr(current_user, c.key) for c in current_user.__table__.columns}
+    data.update(_compute_plan_fields(current_user))
+    return UserRead(**data)
 
 
 @router.patch("/onboarding", response_model=UserRead)

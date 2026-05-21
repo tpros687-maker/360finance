@@ -21,6 +21,16 @@ export async function ssoLogin(token: string): Promise<TokenPair> {
   return res.data;
 }
 
+export async function updateProfile(data: {
+  nombre?: string;
+  apellido?: string;
+  email?: string;
+  telefono?: string | null;
+}): Promise<User> {
+  const res = await api.put<User>("/auth/me", data);
+  return res.data;
+}
+
 export async function completeOnboarding(data: {
   es_productor: boolean;
   es_negocio: boolean;

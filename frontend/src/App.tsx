@@ -25,6 +25,7 @@ const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
 const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
 const CuadernoPage = lazy(() => import("@/pages/CuadernoPage"));
+const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
 
 function OptionalLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -82,6 +83,7 @@ function AppRoutes() {
             <Route path="/recomendaciones" element={<RecomendacionesPage />} />
             <Route path="/score-salud" element={<ScoreSaludPage />} />
             <Route path="/cuaderno" element={<CuadernoPage />} />
+            <Route path="/perfil" element={<PerfilPage />} />
           </Route>
         </Route>
 

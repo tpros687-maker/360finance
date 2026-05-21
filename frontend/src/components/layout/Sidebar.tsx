@@ -250,12 +250,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* User footer */}
         <div className="border-t border-agro-accent/20 px-4 py-4">
           {user && (
-            <div className="mb-3 px-1">
-              <p className="text-sm font-medium text-agro-text truncate">
-                {user.nombre} {user.apellido}
-              </p>
-              <p className="text-xs text-agro-muted truncate">{user.email}</p>
-            </div>
+            <NavLink
+              to="/perfil"
+              onClick={onClose}
+              className="mb-3 flex items-center gap-2 rounded-lg px-1 py-1.5 hover:bg-agro-accent/10 transition-colors group"
+            >
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-agro-primary/10">
+                <span className="text-xs font-bold text-agro-primary">
+                  {user.nombre.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-agro-text truncate group-hover:text-agro-primary transition-colors">
+                  {user.nombre} {user.apellido}
+                </p>
+                <p className="text-xs text-agro-muted truncate">{user.email}</p>
+              </div>
+            </NavLink>
           )}
           <button
             onClick={logout}

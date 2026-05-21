@@ -45,6 +45,7 @@ class UserRead(BaseModel):
     nombre_campo: Optional[str]
     departamento: Optional[str]
     moneda: str
+    telefono: Optional[str] = None
     plan: str
     trial_inicio: Optional[datetime]
     trial_fin: Optional[datetime]
@@ -54,6 +55,22 @@ class UserRead(BaseModel):
     vencido: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class ProfileUpdate(BaseModel):
+    nombre: Optional[str] = None
+    apellido: Optional[str] = None
+    email: Optional[EmailStr] = None
+    telefono: Optional[str] = None
+
+    @field_validator("nombre", "apellido")
+    @classmethod
+    def name_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                raise ValueError("El campo no puede estar vacío")
+        return v
 
 
 class PlanRead(BaseModel):

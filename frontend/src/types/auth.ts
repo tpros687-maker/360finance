@@ -10,6 +10,7 @@ export interface User {
   nombre_campo: string | null;
   departamento: string | null;
   moneda: string;
+  telefono: string | null;
   plan: string;
   trial_inicio: string | null;
   trial_fin: string | null;
