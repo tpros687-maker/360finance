@@ -148,11 +148,11 @@ export function RegistrosTable({ data, isLoading, onEdit }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-center gap-1">
                         {registro.comprobante_url && (
                           <button
                             onClick={() => handleComprobanteClick(registro.comprobante_url!)}
-                            className="p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                            className="p-1.5 rounded-md text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 transition-colors"
                             title="Ver comprobante"
                           >
                             <Paperclip className="h-3.5 w-3.5" />
@@ -160,7 +160,7 @@ export function RegistrosTable({ data, isLoading, onEdit }: Props) {
                         )}
                         <button
                           onClick={() => onEdit(registro)}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+                          className="p-1.5 rounded-md text-slate-500 hover:text-agro-primary hover:bg-agro-primary/10 transition-colors"
                           title="Editar"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -168,7 +168,7 @@ export function RegistrosTable({ data, isLoading, onEdit }: Props) {
                         <button
                           onClick={() => handleDelete(registro)}
                           disabled={deletingId === registro.id}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                          className="p-1.5 rounded-md text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                           title="Eliminar"
                         >
                           {deletingId === registro.id ? (
