@@ -14,7 +14,7 @@ import app.models  # noqa: F401 — register all models
 config = context.config
 import os
 
-raw_url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PUBLIC_URL") or settings.DATABASE_URL
+raw_url = os.environ.get("DATABASE_PUBLIC_URL") or os.environ.get("DATABASE_URL") or settings.DATABASE_URL
 
 # Convertir scheme sin doble reemplazo
 if raw_url.startswith("postgres://"):
