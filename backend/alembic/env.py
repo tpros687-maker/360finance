@@ -18,27 +18,47 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+
 def get_url() -> str:
     raw = os.environ.get("DATABASE_URL", "")
+    # Supabase pooler usa puerto 5432 con SSL — necesita driver síncrono para migraciones
+    # Convertir a psycopg2 si es supabase
+    if "supabase.com" in raw or "pooler.supabase" in raw:
+        raw = raw.replace("postgresql+asyncpg://", "postgresql://")
+        raw = raw.replace("postgres://", "postgresql://")
+        return raw
     if raw.startswith("postgres://"):
         return raw.replace("postgres://", "postgresql+asyncpg://", 1)
     if raw.startswith("postgresql://") and "+asyncpg" not in raw:
         return raw.replace("postgresql://", "postgresql+asyncpg://", 1)
     return raw
 
+
 def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
 
+
 async def run_async_migrations() -> None:
     url = get_url()
-    engine = create_async_engine(url, poolclass=pool.NullPool)
-    async with engine.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-    await engine.dispose()
+    if "supabase.com" in url:
+        from sqlalchemy import create_engine
+        engine = create_engine(url, poolclass=pool.NullPool)
+        with engine.connect() as connection:
+            context.configure(connection=connection, target_metadata=target_metadata)
+            with context.begin_transaction():
+                context.run_migrations()
+        engine.dispose()
+    else:
+        engine = create_async_engine(url, poolclass=pool.NullPool)
+        async with engine.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+        await engine.dispose()
+
 
 def run_migrations_online() -> None:
     asyncio.run(run_async_migrations())
+
 
 run_migrations_online()
