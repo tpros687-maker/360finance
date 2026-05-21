@@ -52,6 +52,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     connect_args = {}
+    db_url = config.get_main_option("sqlalchemy.url")
     if "supabase" in db_url:
         connect_args = {"ssl": "require"}
 
