@@ -820,14 +820,14 @@ export default function FlujoCajaPage() {
     staleTime: 1000 * 60 * 5,
     select: (d) => ({
       ...d,
-      total_por_cobrar: parseFloat(String(d.total_por_cobrar)),
-      total_por_pagar: parseFloat(String(d.total_por_pagar)),
-      balance_proyectado: parseFloat(String(d.balance_proyectado)),
-      cobros_pendientes: (d.cobros_pendientes ?? []).map((c) => ({ ...c, monto: parseFloat(String(c.monto)), dias_restantes: c.dias_restantes != null ? Number(c.dias_restantes) : null })),
-      pagos_pendientes: (d.pagos_pendientes ?? []).map((p) => ({ ...p, monto: parseFloat(String(p.monto)), dias_restantes: p.dias_restantes != null ? Number(p.dias_restantes) : null })),
-      cobros_vencidos: (d.cobros_vencidos ?? []).map((c) => ({ ...c, monto: parseFloat(String(c.monto)), dias_restantes: c.dias_restantes != null ? Number(c.dias_restantes) : null })),
-      pagos_vencidos: (d.pagos_vencidos ?? []).map((p) => ({ ...p, monto: parseFloat(String(p.monto)), dias_restantes: p.dias_restantes != null ? Number(p.dias_restantes) : null })),
-      semanas: (d.semanas ?? []).map((s) => ({ ...s, cobros: parseFloat(String(s.cobros)), pagos: parseFloat(String(s.pagos)), balance_semana: parseFloat(String(s.balance_semana)), balance_acumulado: parseFloat(String(s.balance_acumulado)) })),
+      total_por_cobrar: Number(d.total_por_cobrar ?? 0),
+      total_por_pagar: Number(d.total_por_pagar ?? 0),
+      balance_proyectado: Number(d.balance_proyectado ?? 0),
+      cobros_pendientes: (d.cobros_pendientes ?? []).map((c) => ({ ...c, monto: Number(c.monto ?? 0), dias_restantes: c.dias_restantes != null ? Number(c.dias_restantes) : null })),
+      pagos_pendientes: (d.pagos_pendientes ?? []).map((p) => ({ ...p, monto: Number(p.monto ?? 0), dias_restantes: p.dias_restantes != null ? Number(p.dias_restantes) : null })),
+      cobros_vencidos: (d.cobros_vencidos ?? []).map((c) => ({ ...c, monto: Number(c.monto ?? 0), dias_restantes: c.dias_restantes != null ? Number(c.dias_restantes) : null })),
+      pagos_vencidos: (d.pagos_vencidos ?? []).map((p) => ({ ...p, monto: Number(p.monto ?? 0), dias_restantes: p.dias_restantes != null ? Number(p.dias_restantes) : null })),
+      semanas: (d.semanas ?? []).map((s) => ({ ...s, cobros: Number(s.cobros ?? 0), pagos: Number(s.pagos ?? 0), balance_semana: Number(s.balance_semana ?? 0), balance_acumulado: Number(s.balance_acumulado ?? 0) })),
     }),
   });
 
