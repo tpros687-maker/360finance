@@ -22,6 +22,7 @@ class User(Base):
     nombre_campo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     departamento: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     moneda: Mapped[str] = mapped_column(String(10), nullable=False, server_default="UYU")
+    telefono: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, unique=True, index=True)
     plan: Mapped[str] = mapped_column(String(20), nullable=False, server_default="trial")
     trial_inicio: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     trial_fin: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

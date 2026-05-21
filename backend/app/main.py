@@ -24,6 +24,7 @@ from app.routers.pagos import router as pagos_router
 from app.routers.aplicaciones import router as aplicaciones_router
 from app.routers.rentabilidad import router as rentabilidad_router
 from app.routers.cuaderno import router as cuaderno_router
+from app.routers.whatsapp import router as whatsapp_router
 
 
 @asynccontextmanager
@@ -68,6 +69,7 @@ app.include_router(pagos_router)
 app.include_router(aplicaciones_router)
 app.include_router(rentabilidad_router)
 app.include_router(cuaderno_router)
+app.include_router(whatsapp_router)
 
 # Serve uploaded files
 _uploads_dir = "/app/uploads"
