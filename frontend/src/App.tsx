@@ -24,6 +24,7 @@ const FacturacionPage = lazy(() => import("@/pages/FacturacionPage"));
 const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
 const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
+const CuadernoPage = lazy(() => import("@/pages/CuadernoPage"));
 
 function OptionalLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -80,6 +81,7 @@ function AppRoutes() {
             <Route path="/alertas" element={<Navigate to="/dashboard" replace />} />
             <Route path="/recomendaciones" element={<RecomendacionesPage />} />
             <Route path="/score-salud" element={<ScoreSaludPage />} />
+            <Route path="/cuaderno" element={<CuadernoPage />} />
           </Route>
         </Route>
 
