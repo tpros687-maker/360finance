@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.services.cotizacion import actualizar_cotizacion_hoy
-from app.services.notificaciones import enviar_notificaciones_tareas, enviar_resumen_diario
+from app.services.notificaciones import enviar_notificaciones_tareas, enviar_resumen_diario, generar_resumenes_mensuales
 from app.routers.auth import router as auth_router
 from app.routers.categorias import router as categorias_router
 from app.routers.registros import router as registros_router
@@ -28,6 +28,7 @@ from app.routers.aplicaciones import router as aplicaciones_router
 from app.routers.rentabilidad import router as rentabilidad_router
 from app.routers.cuaderno import router as cuaderno_router
 from app.routers.whatsapp import router as whatsapp_router
+from app.routers.resumenes import router as resumenes_router
 
 
 async def _job_notificaciones() -> None:
@@ -42,6 +43,14 @@ async def _job_resumen_diario() -> None:
     async with AsyncSessionLocal() as db:
         try:
             await enviar_resumen_diario(db)
+        except Exception:
+            pass
+
+
+async def _job_resumen_mensual() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            await generar_resumenes_mensuales(db)
         except Exception:
             pass
 
@@ -67,6 +76,13 @@ async def lifespan(app: FastAPI):
         _job_notificaciones,
         CronTrigger(hour=8, minute=0, timezone="America/Montevideo"),
         id="notificaciones_tareas",
+        replace_existing=True,
+    )
+    # Día 1 de cada mes a las 09:00 — resumen financiero mensual
+    _scheduler.add_job(
+        _job_resumen_mensual,
+        CronTrigger(day=1, hour=9, minute=0, timezone="America/Montevideo"),
+        id="resumen_mensual",
         replace_existing=True,
     )
     _scheduler.start()
@@ -107,6 +123,7 @@ app.include_router(aplicaciones_router)
 app.include_router(rentabilidad_router)
 app.include_router(cuaderno_router)
 app.include_router(whatsapp_router)
+app.include_router(resumenes_router)
 
 # Serve uploaded files
 _uploads_dir = "/app/uploads"

@@ -2,15 +2,17 @@
 import asyncio
 import logging
 from datetime import date, timedelta
+from calendar import monthrange
 
 from sqlalchemy import func as sqlfunc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.categoria import TipoMovimiento
-from app.models.cliente import CuentaCobrar
-from app.models.cuaderno import TareaCuaderno
+from app.models.categoria import Categoria, TipoMovimiento
+from app.models.cliente import CuentaCobrar, CuentaPagar
+from app.models.cuaderno import NotaCuaderno, TareaCuaderno
 from app.models.registro import Registro
+from app.models.resumen_mensual import ResumenMensual
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -179,3 +181,223 @@ async def enviar_resumen_diario(db: AsyncSession) -> None:
             logger.error("Error enviando resumen a usuario %d: %s", user.id, exc)
 
     logger.info("Job resumen diario: %d enviados de %d usuarios", enviados, len(usuarios))
+
+
+# ── Resumen mensual (1° de cada mes, 09:00) ───────────────────────────────────
+
+async def _generar_resumen_mensual(user: User, year: int, month: int, db: AsyncSession) -> ResumenMensual:
+    """Calcula y persiste el ResumenMensual de un usuario para el año/mes dados."""
+    primer_dia = date(year, month, 1)
+    ultimo_dia = date(year, month, monthrange(year, month)[1])
+
+    # Ingresos y gastos
+    def _suma(tipo: TipoMovimiento):
+        return (
+            select(sqlfunc.coalesce(sqlfunc.sum(Registro.monto), 0))
+            .where(
+                Registro.user_id == user.id,
+                Registro.tipo == tipo,
+                Registro.fecha >= primer_dia,
+                Registro.fecha <= ultimo_dia,
+            )
+        )
+
+    ingresos_q = await db.execute(_suma(TipoMovimiento.ingreso))
+    gastos_q = await db.execute(_suma(TipoMovimiento.gasto))
+    total_ingresos = float(ingresos_q.scalar() or 0)
+    total_gastos = float(gastos_q.scalar() or 0)
+
+    # Cobros del mes
+    cobros_cobrados_q = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(CuentaCobrar.monto), 0)).where(
+            CuentaCobrar.user_id == user.id,
+            CuentaCobrar.pagado == True,  # noqa: E712
+        )
+    )
+    cobros_pendientes_q = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(CuentaCobrar.monto), 0)).where(
+            CuentaCobrar.user_id == user.id,
+            CuentaCobrar.pagado == False,  # noqa: E712
+        )
+    )
+    pagos_pagados_q = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(CuentaPagar.monto), 0)).where(
+            CuentaPagar.user_id == user.id,
+            CuentaPagar.pagado == True,  # noqa: E712
+        )
+    )
+    pagos_pendientes_q = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(CuentaPagar.monto), 0)).where(
+            CuentaPagar.user_id == user.id,
+            CuentaPagar.pagado == False,  # noqa: E712
+        )
+    )
+
+    # Cuaderno del mes
+    notas_q = await db.execute(
+        select(sqlfunc.count(NotaCuaderno.id)).where(
+            NotaCuaderno.user_id == user.id,
+            sqlfunc.date(NotaCuaderno.created_at) >= primer_dia,
+            sqlfunc.date(NotaCuaderno.created_at) <= ultimo_dia,
+        )
+    )
+    tareas_creadas_q = await db.execute(
+        select(sqlfunc.count(TareaCuaderno.id)).where(
+            TareaCuaderno.user_id == user.id,
+            sqlfunc.date(TareaCuaderno.created_at) >= primer_dia,
+            sqlfunc.date(TareaCuaderno.created_at) <= ultimo_dia,
+        )
+    )
+    tareas_completadas_q = await db.execute(
+        select(sqlfunc.count(TareaCuaderno.id)).where(
+            TareaCuaderno.user_id == user.id,
+            TareaCuaderno.completada == True,  # noqa: E712
+            sqlfunc.date(TareaCuaderno.created_at) >= primer_dia,
+            sqlfunc.date(TareaCuaderno.created_at) <= ultimo_dia,
+        )
+    )
+
+    # Categoría top de gasto
+    top_gasto_q = await db.execute(
+        select(Categoria.nombre, sqlfunc.sum(Registro.monto).label("total"))
+        .join(Categoria, Registro.categoria_id == Categoria.id)
+        .where(
+            Registro.user_id == user.id,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= primer_dia,
+            Registro.fecha <= ultimo_dia,
+        )
+        .group_by(Categoria.nombre)
+        .order_by(sqlfunc.sum(Registro.monto).desc())
+        .limit(1)
+    )
+    top_gasto_row = top_gasto_q.first()
+
+    # Categoría top de ingreso
+    top_ingreso_q = await db.execute(
+        select(Categoria.nombre, sqlfunc.sum(Registro.monto).label("total"))
+        .join(Categoria, Registro.categoria_id == Categoria.id)
+        .where(
+            Registro.user_id == user.id,
+            Registro.tipo == TipoMovimiento.ingreso,
+            Registro.fecha >= primer_dia,
+            Registro.fecha <= ultimo_dia,
+        )
+        .group_by(Categoria.nombre)
+        .order_by(sqlfunc.sum(Registro.monto).desc())
+        .limit(1)
+    )
+    top_ingreso_row = top_ingreso_q.first()
+
+    resumen = ResumenMensual(
+        user_id=user.id,
+        year=year,
+        month=month,
+        total_ingresos=total_ingresos,
+        total_gastos=total_gastos,
+        balance=total_ingresos - total_gastos,
+        cobros_cobrados=float(cobros_cobrados_q.scalar() or 0),
+        cobros_pendientes=float(cobros_pendientes_q.scalar() or 0),
+        pagos_pagados=float(pagos_pagados_q.scalar() or 0),
+        pagos_pendientes=float(pagos_pendientes_q.scalar() or 0),
+        notas_count=int(notas_q.scalar() or 0),
+        tareas_creadas=int(tareas_creadas_q.scalar() or 0),
+        tareas_completadas=int(tareas_completadas_q.scalar() or 0),
+        categoria_top_gasto=top_gasto_row[0] if top_gasto_row else None,
+        monto_top_gasto=float(top_gasto_row[1]) if top_gasto_row else None,
+        categoria_top_ingreso=top_ingreso_row[0] if top_ingreso_row else None,
+        monto_top_ingreso=float(top_ingreso_row[1]) if top_ingreso_row else None,
+    )
+
+    # Upsert — si ya existe para ese mes, actualizarlo
+    existing_q = await db.execute(
+        select(ResumenMensual).where(
+            ResumenMensual.user_id == user.id,
+            ResumenMensual.year == year,
+            ResumenMensual.month == month,
+        )
+    )
+    existing = existing_q.scalar_one_or_none()
+    if existing:
+        for field in [
+            "total_ingresos", "total_gastos", "balance",
+            "cobros_cobrados", "cobros_pendientes", "pagos_pagados", "pagos_pendientes",
+            "notas_count", "tareas_creadas", "tareas_completadas",
+            "categoria_top_gasto", "monto_top_gasto", "categoria_top_ingreso", "monto_top_ingreso",
+        ]:
+            setattr(existing, field, getattr(resumen, field))
+        await db.commit()
+        return existing
+
+    db.add(resumen)
+    await db.commit()
+    await db.refresh(resumen)
+    return resumen
+
+
+_MESES = [
+    "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
+
+async def generar_resumenes_mensuales(db: AsyncSession) -> None:
+    """
+    Job del 1° de cada mes — genera el resumen del mes anterior
+    y envía WhatsApp a cada usuario con teléfono.
+    """
+    if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN:
+        logger.warning("Twilio no configurado — saltando resumen mensual")
+        return
+
+    hoy = date.today()
+    # Mes anterior
+    primer_dia_mes_actual = hoy.replace(day=1)
+    ultimo_mes = primer_dia_mes_actual - timedelta(days=1)
+    year, month = ultimo_mes.year, ultimo_mes.month
+    nombre_mes = _MESES[month]
+
+    usuarios = await _usuarios_con_telefono(db)
+    loop = asyncio.get_event_loop()
+    enviados = 0
+
+    for user in usuarios:
+        try:
+            r = await _generar_resumen_mensual(user, year, month, db)
+            moneda = user.moneda
+            bal_sign = "+" if r.balance >= 0 else ""
+            frontend_url = settings.FRONTEND_URL.rstrip("/")
+
+            cuerpo_lineas = [
+                f"📊 *Resumen financiero — {nombre_mes} {year}*",
+                f"Hola {user.nombre}, acá está tu cierre del mes:",
+                "",
+                f"💰 Ingresos:  {moneda} ${r.total_ingresos:,.2f}",
+                f"💸 Gastos:    {moneda} ${r.total_gastos:,.2f}",
+                f"📈 Balance:   {moneda} {bal_sign}${r.balance:,.2f}",
+            ]
+
+            if r.categoria_top_gasto:
+                cuerpo_lineas.append(f"🔺 Mayor gasto: {r.categoria_top_gasto} (${r.monto_top_gasto:,.2f})")
+            if r.categoria_top_ingreso:
+                cuerpo_lineas.append(f"🟢 Mayor ingreso: {r.categoria_top_ingreso} (${r.monto_top_ingreso:,.2f})")
+            if r.cobros_pendientes > 0:
+                cuerpo_lineas.append(f"⚠️ Cobros pendientes: {moneda} ${r.cobros_pendientes:,.2f}")
+            if r.pagos_pendientes > 0:
+                cuerpo_lineas.append(f"⚠️ Pagos pendientes: {moneda} ${r.pagos_pendientes:,.2f}")
+
+            cuerpo_lineas += [
+                "",
+                f"📋 Notas: {r.notas_count} · Tareas: {r.tareas_creadas} creadas, {r.tareas_completadas} completadas",
+                "",
+                f"Ver historial completo: {frontend_url}/resumenes",
+            ]
+
+            cuerpo = "\n".join(cuerpo_lineas)
+            await loop.run_in_executor(None, _send_whatsapp, user.telefono, cuerpo)
+            enviados += 1
+            logger.info("Resumen mensual enviado a usuario %d (%s %d)", user.id, nombre_mes, year)
+        except Exception as exc:
+            logger.error("Error generando/enviando resumen mensual a usuario %d: %s", user.id, exc)
+
+    logger.info("Job resumen mensual: %d enviados de %d usuarios", enviados, len(usuarios))

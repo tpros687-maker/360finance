@@ -7,6 +7,7 @@ from app.models.producto import Producto
 from app.models.pago import PagoHistorial
 from app.models.referencia import CotizacionDiaria, ReferenciaProductiva
 from app.models.cuaderno import NotaCuaderno, TareaCuaderno
+from app.models.resumen_mensual import ResumenMensual
 
 __all__ = [
     "User",
@@ -27,4 +28,5 @@ __all__ = [
     "CotizacionDiaria",
     "NotaCuaderno",
     "TareaCuaderno",
+    "ResumenMensual",
 ]

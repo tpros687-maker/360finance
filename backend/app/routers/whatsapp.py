@@ -28,9 +28,11 @@ router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
 
 
 def _twiml(mensaje: str) -> Response:
+    # Escapar caracteres especiales XML para no romper el TwiML
+    safe = mensaje.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>{mensaje}</Message>
+  <Message>{safe}</Message>
 </Response>"""
     return Response(content=xml, media_type="application/xml")
 
@@ -392,24 +394,18 @@ def _cmd_ayuda() -> str:
     return (
         "🌾 *360 Agro Finance — Guía rápida*\n\n"
         "📋 *Guardar cosas:*\n"
-        "  `nota: <texto>` → guarda una nota\n"
-        "  `tarea: <texto>` → guarda una tarea\n"
-        "  _Ej: nota: revisé el alambrado sur_\n"
-        "  _Ej: tarea: comprar sal mineral el lunes_\n\n"
+        "  nota: revisé el alambrado sur\n"
+        "  tarea: comprar sal mineral el lunes\n\n"
         "💰 *Registrar movimientos:*\n"
-        "  _Ej: gasté 1500 en nafta_\n"
-        "  _Ej: vendí 3 novillos en 90000_\n"
-        "  _Ej: Juan me debe 5000_\n"
-        "  _Ej: le pagué al veterinario 8000_\n\n"
-        "❓ *Consultas — escribí tu pregunta:*\n"
-        "  _Ej: cuánto gasté este mes?_\n"
-        "  _Ej: qué tareas tengo pendientes?_\n\n"
+        "  gasté 1500 en nafta\n"
+        "  vendí 3 novillos en 90000\n"
+        "  Juan me debe 5000\n"
+        "  le pagué al veterinario 8000\n\n"
+        "❓ *Preguntas — usá el signo ?:*\n"
+        "  cuánto gasté este mes?\n"
+        "  qué tareas tengo pendientes?\n\n"
         "📊 *Comandos directos:*\n"
-        "  `resumen` → resumen del día\n"
-        "  `tareas` → tareas pendientes\n"
-        "  `gastos` → gastos del mes\n"
-        "  `balance` → balance del mes\n"
-        "  `ayuda` → este mensaje"
+        "  resumen · tareas · gastos · balance · ayuda"
     )
 
 

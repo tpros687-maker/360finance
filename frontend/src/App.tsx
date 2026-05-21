@@ -25,6 +25,7 @@ const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
 const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
 const CuadernoPage = lazy(() => import("@/pages/CuadernoPage"));
+const ResumenesMensualesPage = lazy(() => import("@/pages/ResumenesMensualesPage"));
 const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
 
 function OptionalLayout() {
@@ -83,6 +84,7 @@ function AppRoutes() {
             <Route path="/recomendaciones" element={<RecomendacionesPage />} />
             <Route path="/score-salud" element={<ScoreSaludPage />} />
             <Route path="/cuaderno" element={<CuadernoPage />} />
+            <Route path="/resumenes" element={<ResumenesMensualesPage />} />
             <Route path="/perfil" element={<PerfilPage />} />
           </Route>
         </Route>
