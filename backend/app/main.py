@@ -1,6 +1,8 @@
 import os
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -8,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.services.cotizacion import actualizar_cotizacion_hoy
+from app.services.notificaciones import enviar_notificaciones_tareas
 from app.routers.auth import router as auth_router
 from app.routers.categorias import router as categorias_router
 from app.routers.registros import router as registros_router
@@ -27,6 +30,17 @@ from app.routers.cuaderno import router as cuaderno_router
 from app.routers.whatsapp import router as whatsapp_router
 
 
+async def _job_notificaciones() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            await enviar_notificaciones_tareas(db)
+        except Exception:
+            pass
+
+
+_scheduler = AsyncIOScheduler()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
@@ -34,7 +48,16 @@ async def lifespan(app: FastAPI):
             await actualizar_cotizacion_hoy(db)
         except Exception:
             pass  # Nunca bloquear el arranque por fallo de cotización
+
+    _scheduler.add_job(
+        _job_notificaciones,
+        CronTrigger(hour=8, minute=0, timezone="America/Montevideo"),
+        id="notificaciones_tareas",
+        replace_existing=True,
+    )
+    _scheduler.start()
     yield
+    _scheduler.shutdown(wait=False)
 
 
 app = FastAPI(

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     GROQ_API_KEY: str = ""
     SSO_SECRET: str = "shared-secret-must-match-360agro"
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
     MP_ACCESS_TOKEN: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
 
