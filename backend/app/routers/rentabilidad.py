@@ -13,7 +13,6 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.categoria import Categoria, TipoMovimiento
 from app.models.mapa import Potrero
-from app.models.produccion import CicloAgricola, Lote
 from app.models.registro import Registro
 from app.models.user import User
 from app.services.imputacion import sugerir_imputacion
@@ -557,29 +556,9 @@ async def sugerir_imputacion_endpoint(
     )
     potrero_ids = [r for (r,) in pot_res.all()]
 
-    # Lotes activos en la fecha (abiertos con entrada <= fecha)
-    lotes_res = await db.execute(
-        select(Lote.id, Lote.potrero_id).where(
-            Lote.potrero_id.in_(potrero_ids),
-            Lote.fecha_entrada <= body.fecha,
-            Lote.cerrado == False,  # noqa: E712
-        )
-    )
-    lotes_activos = [(lid, pid) for lid, pid in lotes_res.all()]
-
-    # Ciclos activos en la fecha (siembra <= fecha, cosecha es null o >= fecha)
-    ciclos_res = await db.execute(
-        select(CicloAgricola.id, CicloAgricola.potrero_id).where(
-            CicloAgricola.potrero_id.in_(potrero_ids),
-            CicloAgricola.fecha_siembra <= body.fecha,
-            (CicloAgricola.fecha_cosecha.is_(None)) | (CicloAgricola.fecha_cosecha >= body.fecha),
-        )
-    )
-    ciclos_activos = [(cid, pid) for cid, pid in ciclos_res.all()]
-
     return sugerir_imputacion(
         categoria_nombre=categoria.nombre,
         potreros_activos=potrero_ids,
-        lotes_activos=lotes_activos,
-        ciclos_activos=ciclos_activos,
+        lotes_activos=[],
+        ciclos_activos=[],
     )

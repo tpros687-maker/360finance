@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.categoria import TipoMovimiento
 from app.models.mapa import Potrero
-from app.models.produccion import CicloAgricola, Lote
 from app.models.referencia import CotizacionDiaria, RentabilidadCache
 from app.models.registro import Registro
 
@@ -45,51 +44,6 @@ async def calcular_ingresos_actividad(
     db: AsyncSession,
 ) -> tuple[Decimal, bool]:
     """Devuelve (ingresos_usd, es_proyectado)."""
-    hoy = date.today()
-
-    if actividad_tipo == "lote":
-        res = await db.execute(select(Lote).where(Lote.id == actividad_id))
-        lote = res.scalar_one_or_none()
-        if lote is None:
-            return Decimal("0"), False
-
-        abierto = not lote.cerrado
-
-        # Busca registro de ingreso imputado a este lote para obtener monto y moneda reales
-        reg_res = await db.execute(
-            select(Registro).where(
-                Registro.actividad_tipo == "lote",
-                Registro.actividad_id == actividad_id,
-                Registro.tipo == TipoMovimiento.ingreso,
-            ).order_by(Registro.fecha.desc()).limit(1)
-        )
-        registro = reg_res.scalar_one_or_none()
-
-        if registro is not None:
-            ingresos_usd = await convertir_a_usd(
-                Decimal(str(registro.monto)), registro.moneda, registro.fecha, db
-            )
-            return ingresos_usd, abierto
-
-        return Decimal("0"), abierto
-
-    if actividad_tipo == "ciclo":
-        res = await db.execute(select(CicloAgricola).where(CicloAgricola.id == actividad_id))
-        ciclo = res.scalar_one_or_none()
-        if ciclo is None:
-            return Decimal("0"), False
-
-        abierto = ciclo.fecha_cosecha is None or ciclo.toneladas_cosechadas is None
-
-        if ciclo.toneladas_cosechadas is not None and ciclo.precio_venta_tn is not None:
-            ingreso_bruto = Decimal(str(ciclo.toneladas_cosechadas)) * Decimal(str(ciclo.precio_venta_tn))
-            fecha_ref = ciclo.fecha_cosecha or hoy
-            ingresos_usd = await convertir_a_usd(ingreso_bruto, ciclo.moneda, fecha_ref, db)
-            return ingresos_usd, abierto
-
-        # Sin precio ni toneladas: ingreso cero, marcado proyectado si está abierto
-        return Decimal("0"), abierto
-
     return Decimal("0"), False
 
 
@@ -111,17 +65,6 @@ async def calcular_gastos_potrero(
         else Decimal("0")
     )
 
-    # Lotes y ciclos del potrero para capturar gastos imputados a actividades
-    lotes_res = await db.execute(
-        select(Lote.id).where(Lote.potrero_id == potrero_id)
-    )
-    lote_ids = [r for (r,) in lotes_res.all()]
-
-    ciclos_res = await db.execute(
-        select(CicloAgricola.id).where(CicloAgricola.potrero_id == potrero_id)
-    )
-    ciclo_ids = [r for (r,) in ciclos_res.all()]
-
     # Filtros de período
     filtros_base = [Registro.tipo == TipoMovimiento.gasto]
     if periodo_desde:
@@ -132,16 +75,6 @@ async def calcular_gastos_potrero(
     cond_directo_potrero = and_(
         Registro.potrero_id == potrero_id,
         Registro.actividad_tipo.is_(None),
-        *filtros_base,
-    )
-    cond_lotes = and_(
-        Registro.actividad_tipo == "lote",
-        Registro.actividad_id.in_(lote_ids) if lote_ids else Registro.actividad_id.is_(None),
-        *filtros_base,
-    )
-    cond_ciclos = and_(
-        Registro.actividad_tipo == "ciclo",
-        Registro.actividad_id.in_(ciclo_ids) if ciclo_ids else Registro.actividad_id.is_(None),
         *filtros_base,
     )
 
@@ -160,7 +93,7 @@ async def calcular_gastos_potrero(
         *filtros_base,
     )
 
-    stmt_potrero = select(Registro).where(or_(cond_directo_potrero, cond_lotes, cond_ciclos) if (lote_ids or ciclo_ids) else cond_directo_potrero)
+    stmt_potrero = select(Registro).where(cond_directo_potrero)
     stmt_shared = select(Registro).where(or_(cond_shared, cond_sin_imputar))
 
     pot_res = await db.execute(stmt_potrero)
@@ -260,91 +193,9 @@ async def calcular_rentabilidad_potrero(
     fecha_hasta = periodo_hasta or hoy
     dias_periodo = max((fecha_hasta - fecha_desde).days, 1)
 
-    # Actividades del potrero en el período
-    lote_stmt = select(Lote).where(Lote.potrero_id == potrero_id)
-    if periodo_desde:
-        lote_stmt = lote_stmt.where(Lote.fecha_entrada >= periodo_desde)
-    if periodo_hasta:
-        lote_stmt = lote_stmt.where(Lote.fecha_entrada <= periodo_hasta)
-    lotes = (await db.execute(lote_stmt)).scalars().all()
-
-    ciclo_stmt = select(CicloAgricola).where(CicloAgricola.potrero_id == potrero_id)
-    if periodo_desde:
-        ciclo_stmt = ciclo_stmt.where(CicloAgricola.fecha_siembra >= periodo_desde)
-    if periodo_hasta:
-        ciclo_stmt = ciclo_stmt.where(CicloAgricola.fecha_siembra <= periodo_hasta)
-    ciclos = (await db.execute(ciclo_stmt)).scalars().all()
-
-    async def gastos_directos_actividad(tipo: str, act_id: int) -> Decimal:
-        filtros = [
-            Registro.tipo == TipoMovimiento.gasto,
-            Registro.actividad_tipo == tipo,
-            Registro.actividad_id == act_id,
-        ]
-        if periodo_desde:
-            filtros.append(Registro.fecha >= periodo_desde)
-        if periodo_hasta:
-            filtros.append(Registro.fecha <= periodo_hasta)
-        g_res = await db.execute(select(Registro).where(*filtros))
-        total = Decimal("0")
-        for r in g_res.scalars().all():
-            total += await convertir_a_usd(Decimal(str(r.monto)), r.moneda, r.fecha, db)
-        return total
-
     actividades: list[ActividadRentabilidad] = []
     total_ingresos = Decimal("0")
     any_proyectado = False
-
-    for lote in lotes:
-        ingresos, proyectado = await calcular_ingresos_actividad("lote", lote.id, db)
-        gastos_d = await gastos_directos_actividad("lote", lote.id)
-        margen = ingresos - gastos_d
-        margen_ha = (margen / ha_potrero).quantize(Decimal("0.01")) if ha_potrero else None
-        dias_lote = max((hoy - lote.fecha_entrada).days, 1)
-        anualizado = (
-            (margen_ha * Decimal("365") / Decimal(str(dias_lote))).quantize(Decimal("0.01"))
-            if margen_ha is not None else None
-        )
-        if proyectado:
-            any_proyectado = True
-        total_ingresos += ingresos
-        actividades.append(ActividadRentabilidad(
-            actividad_tipo="lote",
-            actividad_id=lote.id,
-            nombre=lote.categoria or f"Lote #{lote.id}",
-            ingresos_usd=ingresos,
-            gastos_directos_usd=gastos_d,
-            margen_usd=margen,
-            margen_ha_usd=margen_ha,
-            anualizado_usd_ha=anualizado,
-            es_proyectado=proyectado,
-        ))
-
-    for ciclo in ciclos:
-        ingresos, proyectado = await calcular_ingresos_actividad("ciclo", ciclo.id, db)
-        gastos_d = await gastos_directos_actividad("ciclo", ciclo.id)
-        margen = ingresos - gastos_d
-        margen_ha = (margen / ha_potrero).quantize(Decimal("0.01")) if ha_potrero else None
-        f_out = ciclo.fecha_cosecha or hoy
-        dias_ciclo = max((f_out - ciclo.fecha_siembra).days, 1)
-        anualizado = (
-            (margen_ha * Decimal("365") / Decimal(str(dias_ciclo))).quantize(Decimal("0.01"))
-            if margen_ha is not None else None
-        )
-        if proyectado:
-            any_proyectado = True
-        total_ingresos += ingresos
-        actividades.append(ActividadRentabilidad(
-            actividad_tipo="ciclo",
-            actividad_id=ciclo.id,
-            nombre=ciclo.cultivo or f"Ciclo #{ciclo.id}",
-            ingresos_usd=ingresos,
-            gastos_directos_usd=gastos_d,
-            margen_usd=margen,
-            margen_ha_usd=margen_ha,
-            anualizado_usd_ha=anualizado,
-            es_proyectado=proyectado,
-        ))
 
     directos, prorrateados, estructurales = await calcular_gastos_potrero(
         potrero_id, periodo_desde, periodo_hasta, total_ha_estab, db
@@ -452,41 +303,6 @@ async def calcular_proyeccion_anual(
         gastos_p = ingresos_p - r.margen_neto_usd
         total_ingresos += ingresos_p
         total_gastos += gastos_p
-
-        # Estimate remaining income from open activities with no recorded income yet
-        for act in r.actividades:
-            if not act.es_proyectado or act.ingresos_usd > 0:
-                continue
-            if act.actividad_tipo == "lote":
-                lote_res = await db.execute(
-                    select(Lote).where(Lote.id == act.actividad_id)
-                )
-                lote = lote_res.scalar_one_or_none()
-                if lote and lote.peso_total_entrada_kg and lote.cantidad:
-                    # Assume 200 kg gain per head at USD 2.20/kg (novillo exportación)
-                    ingreso_estimado = (
-                        Decimal("200") * Decimal(str(lote.cantidad)) * Decimal("2.20")
-                    ).quantize(Decimal("0.01"))
-                    total_ingresos += ingreso_estimado
-            elif act.actividad_tipo == "ciclo":
-                ciclo_res = await db.execute(
-                    select(CicloAgricola).where(CicloAgricola.id == act.actividad_id)
-                )
-                ciclo = ciclo_res.scalar_one_or_none()
-                # Estimate using reference yield 2.5 tn/ha × potrero ha × precio_venta_tn
-                if (
-                    ciclo
-                    and ciclo.precio_venta_tn
-                    and potrero.hectareas
-                ):
-                    tn_estimadas = Decimal("2.5") * Decimal(str(potrero.hectareas))
-                    ingreso_estimado = await convertir_a_usd(
-                        tn_estimadas * Decimal(str(ciclo.precio_venta_tn)),
-                        ciclo.moneda,
-                        hoy,
-                        db,
-                    )
-                    total_ingresos += ingreso_estimado
 
     ha_ref = total_ha if total_ha > 0 else None
 
