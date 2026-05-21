@@ -624,6 +624,13 @@ function ProveedorCard({ proveedor, onEdit, onDelete, defaultMoneda }: { proveed
 function ResumenTab({ data, moneda }: { data: any; moneda: string }) {
   const hayVencidos = data.cobros_vencidos.length > 0 || data.pagos_vencidos.length > 0;
   const hayResumen = data.total_por_cobrar > 0 || data.total_por_pagar > 0;
+  console.log("[FlujoCaja] data:", {
+    total_por_cobrar: data.total_por_cobrar,
+    total_por_pagar: data.total_por_pagar,
+    balance_proyectado: data.balance_proyectado,
+    hayResumen,
+    semanas: data.semanas,
+  });
   return (
     <div className="space-y-6">
       {data.alerta_liquidez && (
