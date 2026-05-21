@@ -1,7 +1,7 @@
 """Webhook de WhatsApp via Twilio — recibe mensajes y los procesa con IA."""
 import json
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Form
@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models.categoria import Categoria, TipoMovimiento
+from app.models.cliente import Cliente, CuentaCobrar, Proveedor, CuentaPagar
 from app.models.cuaderno import NotaCuaderno, TareaCuaderno
 from app.models.registro import Registro
 from app.models.user import User
@@ -34,10 +35,28 @@ def _groq_client() -> Groq:
     return Groq(api_key=settings.GROQ_API_KEY)
 
 
+def _parse_date(s: str | None) -> date | None:
+    if not s:
+        return None
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _parse_monto(raw) -> Decimal | None:
+    try:
+        m = Decimal(str(raw)).quantize(Decimal("0.01"))
+        return m if m > 0 else None
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+# ── Categorías ────────────────────────────────────────────────────────────────
+
 async def _cargar_categorias(
     db: AsyncSession, user_id: int, tipo: TipoMovimiento
 ) -> list[Categoria]:
-    """Carga categorías del sistema + personales del usuario para un tipo dado."""
     result = await db.execute(
         select(Categoria)
         .where(
@@ -49,6 +68,61 @@ async def _cargar_categorias(
     return list(result.scalars().all())
 
 
+async def _resolver_categoria(
+    db: AsyncSession,
+    user_id: int,
+    tipo: TipoMovimiento,
+    nombre_sugerido: str | None,
+    categorias: list[Categoria],
+) -> Categoria:
+    if nombre_sugerido:
+        lower = nombre_sugerido.lower().strip()
+        for cat in categorias:
+            if cat.nombre.lower() == lower:
+                return cat
+    for cat in categorias:
+        if cat.nombre.lower() == "otros":
+            return cat
+    cat = Categoria(nombre="Otros", tipo=tipo, es_personalizada=True, user_id=user_id, color="#6b7280")
+    db.add(cat)
+    await db.flush()
+    return cat
+
+
+# ── Clientes / Proveedores ────────────────────────────────────────────────────
+
+async def _get_or_create_cliente(db: AsyncSession, user_id: int, nombre: str) -> Cliente:
+    result = await db.execute(
+        select(Cliente).where(
+            Cliente.user_id == user_id,
+            sqlfunc.lower(Cliente.nombre) == nombre.lower().strip(),
+        )
+    )
+    cliente = result.scalar_one_or_none()
+    if cliente is None:
+        cliente = Cliente(user_id=user_id, nombre=nombre.strip())
+        db.add(cliente)
+        await db.flush()
+    return cliente
+
+
+async def _get_or_create_proveedor(db: AsyncSession, user_id: int, nombre: str) -> Proveedor:
+    result = await db.execute(
+        select(Proveedor).where(
+            Proveedor.user_id == user_id,
+            sqlfunc.lower(Proveedor.nombre) == nombre.lower().strip(),
+        )
+    )
+    proveedor = result.scalar_one_or_none()
+    if proveedor is None:
+        proveedor = Proveedor(user_id=user_id, nombre=nombre.strip())
+        db.add(proveedor)
+        await db.flush()
+    return proveedor
+
+
+# ── Clasificación con Groq ────────────────────────────────────────────────────
+
 async def _clasificar(
     mensaje: str,
     nombre_usuario: str,
@@ -56,7 +130,6 @@ async def _clasificar(
     cats_gasto: list[str],
     cats_ingreso: list[str],
 ) -> dict:
-    """Llama a Groq para clasificar el mensaje y extraer datos estructurados."""
     client = _groq_client()
     hoy = date.today().isoformat()
 
@@ -66,27 +139,30 @@ async def _clasificar(
     system = (
         "Sos un asistente de campo agrícola. "
         "El usuario te manda un mensaje por WhatsApp. "
-        "Clasificá en uno de estos tipos: nota, tarea, consulta, gasto, ingreso.\n"
-        "- nota: registra algo que ya ocurrió o una observación\n"
+        "Clasificá en uno de estos tipos: nota, tarea, consulta, gasto, ingreso, cobro, pago.\n"
+        "- nota: registra algo que ocurrió o una observación\n"
         "- tarea: quiere recordar hacer algo (puede incluir fecha futura)\n"
         "- consulta: hace una pregunta o pide información\n"
-        "- gasto: gastó, pagó, compró o egresó dinero\n"
-        "- ingreso: cobró, vendió, recibió o entró dinero\n\n"
+        "- gasto: gastó, pagó, compró o egresó dinero (sin contraparte específica)\n"
+        "- ingreso: cobró, vendió, recibió dinero (sin contraparte específica)\n"
+        "- cobro: alguien le debe dinero o registra una cuenta por cobrar a un cliente\n"
+        "- pago: debe pagarle a alguien o registra una deuda con un proveedor\n\n"
         f"Hoy es {hoy}. Usuario: {nombre_usuario}. Moneda por defecto: {moneda_usuario}.\n\n"
         f"Categorías de gasto disponibles: {cats_gasto_str}\n"
         f"Categorías de ingreso disponibles: {cats_ingreso_str}\n\n"
-        "Para gasto/ingreso elegí la categoría más apropiada de la lista. "
-        "Si ninguna encaja, usá 'Otros'.\n\n"
+        "Para gasto/ingreso elegí la categoría más apropiada. Si ninguna encaja, usá 'Otros'.\n"
+        "Para cobro/pago extraé el nombre de la contraparte (cliente o proveedor).\n\n"
         "Respondé SOLO con JSON válido (sin markdown, sin texto extra):\n"
-        '{"tipo": "nota|tarea|consulta|gasto|ingreso", '
+        '{"tipo": "nota|tarea|consulta|gasto|ingreso|cobro|pago", '
         '"texto": "<descripción limpia>", '
         '"fecha": "<YYYY-MM-DD o null>", '
         '"monto": <número o null>, '
         '"moneda": "<UYU|USD>", '
-        '"categoria": "<nombre exacto de la lista o Otros>"}'
-        "\n\nPara gasto/ingreso: extraé monto numérico, "
-        "inferí moneda del contexto ($ sin aclaración = moneda del usuario), "
-        "fecha es hoy si no se especifica."
+        '"categoria": "<nombre de la lista o Otros o null>", '
+        '"nombre_contraparte": "<nombre del cliente/proveedor o null>", '
+        '"fecha_vencimiento": "<YYYY-MM-DD o null>"}'
+        "\n\nPara gasto/ingreso: fecha es hoy si no se especifica. "
+        "Para cobro/pago: fecha_vencimiento es la fecha límite de pago si se menciona."
     )
 
     response = client.chat.completions.create(
@@ -95,7 +171,7 @@ async def _clasificar(
             {"role": "system", "content": system},
             {"role": "user", "content": mensaje},
         ],
-        max_tokens=300,
+        max_tokens=350,
         temperature=0.1,
     )
 
@@ -110,47 +186,16 @@ async def _clasificar(
         return {
             "tipo": "consulta", "texto": mensaje, "fecha": None,
             "monto": None, "moneda": moneda_usuario, "categoria": None,
+            "nombre_contraparte": None, "fecha_vencimiento": None,
         }
 
 
-async def _resolver_categoria(
-    db: AsyncSession,
-    user_id: int,
-    tipo: TipoMovimiento,
-    nombre_sugerido: str | None,
-    categorias: list[Categoria],
-) -> Categoria:
-    """Devuelve la categoría que Groq sugirió; si no coincide, usa/crea 'Otros'."""
-    if nombre_sugerido:
-        lower = nombre_sugerido.lower().strip()
-        for cat in categorias:
-            if cat.nombre.lower() == lower:
-                return cat
-
-    # Buscar "Otros" en la lista ya cargada
-    for cat in categorias:
-        if cat.nombre.lower() == "otros":
-            return cat
-
-    # Crear "Otros" como última opción
-    cat = Categoria(
-        nombre="Otros",
-        tipo=tipo,
-        es_personalizada=True,
-        user_id=user_id,
-        color="#6b7280",
-    )
-    db.add(cat)
-    await db.flush()
-    return cat
-
+# ── Consulta ──────────────────────────────────────────────────────────────────
 
 async def _responder_consulta(mensaje: str, user: User, db: AsyncSession) -> str:
-    """Responde una consulta con datos financieros del mes + cuaderno del usuario."""
     hoy = date.today()
     primer_dia_mes = hoy.replace(day=1)
 
-    # Totales del mes actual
     gastos_q = await db.execute(
         select(sqlfunc.coalesce(sqlfunc.sum(Registro.monto), 0)).where(
             Registro.user_id == user.id,
@@ -169,7 +214,6 @@ async def _responder_consulta(mensaje: str, user: User, db: AsyncSession) -> str
     total_ingresos = float(ingresos_q.scalar() or 0)
     balance = total_ingresos - total_gastos
 
-    # Cuaderno
     notas_q = await db.execute(
         select(NotaCuaderno)
         .where(NotaCuaderno.user_id == user.id)
@@ -196,13 +240,11 @@ async def _responder_consulta(mensaje: str, user: User, db: AsyncSession) -> str
         f"- Ingresos: {moneda} ${total_ingresos:,.2f}",
         f"- Balance:  {moneda} ${balance:,.2f} ({'positivo' if balance >= 0 else 'negativo'})",
     ]
-
     if notas:
         lineas.append("\n=== NOTAS DEL CUADERNO ===")
         for n in notas:
             fecha = n.created_at.strftime("%d/%m/%Y") if n.created_at else "?"
             lineas.append(f"  [{fecha}] {n.texto}")
-
     if tareas:
         lineas.append("\n=== TAREAS PENDIENTES ===")
         for t in tareas:
@@ -229,9 +271,10 @@ async def _responder_consulta(mensaje: str, user: User, db: AsyncSession) -> str
         max_tokens=512,
         temperature=0.4,
     )
-
     return (response.choices[0].message.content or "No pude procesar tu consulta.").strip()
 
+
+# ── Webhook ───────────────────────────────────────────────────────────────────
 
 @router.post("/webhook")
 async def whatsapp_webhook(
@@ -254,16 +297,14 @@ async def whatsapp_webhook(
     if not mensaje:
         return _twiml("No recibí ningún mensaje. Intentá de nuevo.")
 
-    # Cargar categorías antes de llamar a Groq para incluirlas en el prompt
     cats_gasto = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
     cats_ingreso = await _cargar_categorias(db, user.id, TipoMovimiento.ingreso)
-    cats_gasto_nombres = [c.nombre for c in cats_gasto]
-    cats_ingreso_nombres = [c.nombre for c in cats_ingreso]
 
     try:
         datos = await _clasificar(
             mensaje, user.nombre, user.moneda,
-            cats_gasto_nombres, cats_ingreso_nombres,
+            [c.nombre for c in cats_gasto],
+            [c.nombre for c in cats_ingreso],
         )
     except Exception as exc:
         logger.exception("Error clasificando mensaje WhatsApp: %s", exc)
@@ -275,6 +316,8 @@ async def whatsapp_webhook(
     monto_raw = datos.get("monto")
     moneda = datos.get("moneda") or user.moneda
     cat_sugerida = datos.get("categoria")
+    contraparte = (datos.get("nombre_contraparte") or "").strip()
+    vencimiento_str = datos.get("fecha_vencimiento")
 
     # ── Nota ─────────────────────────────────────────────────────────────────
     if tipo == "nota":
@@ -284,36 +327,22 @@ async def whatsapp_webhook(
 
     # ── Tarea ─────────────────────────────────────────────────────────────────
     if tipo == "tarea":
-        fecha_planificada = None
-        if fecha_str:
-            try:
-                fecha_planificada = date.fromisoformat(fecha_str)
-            except ValueError:
-                pass
-        db.add(TareaCuaderno(user_id=user.id, texto=texto, fecha_planificada=fecha_planificada))
+        db.add(TareaCuaderno(
+            user_id=user.id,
+            texto=texto,
+            fecha_planificada=_parse_date(fecha_str),
+        ))
         await db.commit()
-        if fecha_planificada:
-            return _twiml(f"✅ Tarea guardada para el {fecha_planificada.strftime('%d/%m/%Y')}.")
+        fp = _parse_date(fecha_str)
+        if fp:
+            return _twiml(f"✅ Tarea guardada para el {fp.strftime('%d/%m/%Y')}.")
         return _twiml("✅ Tarea guardada en tu cuaderno.")
 
     # ── Gasto / Ingreso ───────────────────────────────────────────────────────
     if tipo in ("gasto", "ingreso"):
-        try:
-            monto = Decimal(str(monto_raw)).quantize(Decimal("0.01"))
-            if monto <= 0:
-                raise ValueError
-        except (InvalidOperation, ValueError, TypeError):
-            return _twiml(
-                "No pude identificar el monto. "
-                "Intentá: 'Gasté 1500 en combustible'."
-            )
-
-        fecha_registro = date.today()
-        if fecha_str:
-            try:
-                fecha_registro = date.fromisoformat(fecha_str)
-            except ValueError:
-                pass
+        monto = _parse_monto(monto_raw)
+        if monto is None:
+            return _twiml("No pude identificar el monto. Intentá: 'Gasté 1500 en combustible'.")
 
         tipo_mov = TipoMovimiento.gasto if tipo == "gasto" else TipoMovimiento.ingreso
         cats_lista = cats_gasto if tipo_mov == TipoMovimiento.gasto else cats_ingreso
@@ -325,15 +354,56 @@ async def whatsapp_webhook(
             tipo=tipo_mov,
             monto=monto,
             moneda=moneda,
-            fecha=fecha_registro,
+            fecha=_parse_date(fecha_str) or date.today(),
             descripcion=texto,
         ))
         await db.commit()
-
         etiqueta = "Gasto" if tipo == "gasto" else "Ingreso"
-        return _twiml(
-            f"✅ {etiqueta} de {moneda} ${monto:,.2f} registrado en '{categoria.nombre}': {texto}"
-        )
+        return _twiml(f"✅ {etiqueta} de {moneda} ${monto:,.2f} registrado en '{categoria.nombre}': {texto}")
+
+    # ── Cobro ─────────────────────────────────────────────────────────────────
+    if tipo == "cobro":
+        monto = _parse_monto(monto_raw)
+        if monto is None:
+            return _twiml("No pude identificar el monto. Intentá: 'Juan me debe 5000'.")
+        if not contraparte:
+            return _twiml("No pude identificar el nombre del cliente. Intentá: 'Pedro me debe 3000'.")
+
+        fecha_venc = _parse_date(vencimiento_str)
+        cliente = await _get_or_create_cliente(db, user.id, contraparte)
+        db.add(CuentaCobrar(
+            user_id=user.id,
+            cliente_id=cliente.id,
+            monto=float(monto),
+            moneda=moneda,
+            descripcion=texto or None,
+            fecha_vencimiento=datetime.combine(fecha_venc, datetime.min.time()) if fecha_venc else None,
+        ))
+        await db.commit()
+        venc_str = f" (vence {fecha_venc.strftime('%d/%m/%Y')})" if fecha_venc else ""
+        return _twiml(f"✅ Cobro de {moneda} ${monto:,.2f} registrado para {cliente.nombre}{venc_str}.")
+
+    # ── Pago ──────────────────────────────────────────────────────────────────
+    if tipo == "pago":
+        monto = _parse_monto(monto_raw)
+        if monto is None:
+            return _twiml("No pude identificar el monto. Intentá: 'Debo 8000 a AgroInsumos'.")
+        if not contraparte:
+            return _twiml("No pude identificar el nombre del proveedor. Intentá: 'Debo 8000 a AgroInsumos'.")
+
+        fecha_venc = _parse_date(vencimiento_str)
+        proveedor = await _get_or_create_proveedor(db, user.id, contraparte)
+        db.add(CuentaPagar(
+            user_id=user.id,
+            proveedor_id=proveedor.id,
+            monto=float(monto),
+            moneda=moneda,
+            descripcion=texto or None,
+            fecha_vencimiento=datetime.combine(fecha_venc, datetime.min.time()) if fecha_venc else None,
+        ))
+        await db.commit()
+        venc_str = f" (vence {fecha_venc.strftime('%d/%m/%Y')})" if fecha_venc else ""
+        return _twiml(f"✅ Pago de {moneda} ${monto:,.2f} registrado para {proveedor.nombre}{venc_str}.")
 
     # ── Consulta (default) ────────────────────────────────────────────────────
     try:
