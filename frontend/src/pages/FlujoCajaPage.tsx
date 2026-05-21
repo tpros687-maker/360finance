@@ -651,7 +651,7 @@ function ResumenTab({ data, moneda }: { data: any; moneda: string }) {
             color={data.balance_proyectado >= 0 ? "text-emerald-600" : "text-red-600"} />
         </div>
       )}
-      {hayResumen && (
+      {data.semanas?.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base text-agro-text">Proyección semanal (13 semanas)</CardTitle>
