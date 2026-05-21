@@ -8,12 +8,7 @@ import { Toaster } from "@/components/Toaster";
 import { PageLoader } from "@/components/PageLoader";
 import { useAuthStore } from "@/store/authStore";
 
-function OptionalLayout() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  if (isAuthenticated) return <AppLayout />;
-  return <Outlet />;
-}
-
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const RegisterPage = lazy(() => import("@/pages/RegisterPage"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
@@ -30,6 +25,18 @@ const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
 const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
 
+function OptionalLayout() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  if (isAuthenticated) return <AppLayout />;
+  return <Outlet />;
+}
+
+function HomeRoute() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <LandingPage />;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -43,6 +50,9 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
+        {/* Home */}
+        <Route path="/" element={<HomeRoute />} />
+
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
