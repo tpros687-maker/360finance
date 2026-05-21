@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen, StickyNote, CheckSquare, Plus, Trash2, CheckCircle2,
   ChevronDown, ChevronUp, Calendar, MapPin, AlertTriangle, Loader2,
+  MessageCircle, X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -355,6 +356,61 @@ function TareaRow({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+// ── Tarjeta guía WhatsApp ─────────────────────────────────────────────────────
+
+function GuiaWhatsApp() {
+  const [visible, setVisible] = useState(() => {
+    return localStorage.getItem("cuaderno_guia_wsp") !== "oculta";
+  });
+
+  if (!visible) return null;
+
+  return (
+    <div className="rounded-xl border border-green-200 bg-green-50 p-4 relative">
+      <button
+        onClick={() => {
+          setVisible(false);
+          localStorage.setItem("cuaderno_guia_wsp", "oculta");
+        }}
+        className="absolute top-3 right-3 text-green-400 hover:text-green-600"
+      >
+        <X className="h-4 w-4" />
+      </button>
+
+      <div className="flex items-center gap-2 mb-3">
+        <MessageCircle className="h-4 w-4 text-green-600 shrink-0" />
+        <span className="text-sm font-semibold text-green-800">
+          Cómo usar el bot de WhatsApp
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="bg-white rounded-lg p-3 border border-green-100">
+          <p className="font-semibold text-green-700 mb-1.5">📝 Guardar nota</p>
+          <p className="text-agro-muted mb-1">Empezá con <code className="bg-green-100 px-1 rounded">nota:</code></p>
+          <p className="text-agro-text italic">"nota: revisé el alambrado sur"</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-green-100">
+          <p className="font-semibold text-green-700 mb-1.5">✅ Guardar tarea</p>
+          <p className="text-agro-muted mb-1">Empezá con <code className="bg-green-100 px-1 rounded">tarea:</code></p>
+          <p className="text-agro-text italic">"tarea: comprar sal el lunes"</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-green-100">
+          <p className="font-semibold text-green-700 mb-1.5">❓ Hacer consulta</p>
+          <p className="text-agro-muted mb-1">Escribí tu pregunta con <code className="bg-green-100 px-1 rounded">?</code></p>
+          <p className="text-agro-text italic">"cuánto gasté este mes?"</p>
+        </div>
+      </div>
+
+      <p className="text-xs text-green-700 mt-3">
+        Comandos directos: <code className="bg-green-100 px-1 rounded">resumen</code> · <code className="bg-green-100 px-1 rounded">tareas</code> · <code className="bg-green-100 px-1 rounded">balance</code> · <code className="bg-green-100 px-1 rounded">ayuda</code>
+      </p>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function CuadernoPage() {
   const [tab, setTab] = useState<Tab>("notas");
   const [modalNota, setModalNota] = useState(false);
@@ -442,6 +498,9 @@ export default function CuadernoPage() {
       {/* Content */}
       <div className="flex-1 px-6 py-6">
         <div className="max-w-4xl mx-auto space-y-3">
+
+          {/* Guía WhatsApp */}
+          <GuiaWhatsApp />
 
           {/* ── Tab Notas ── */}
           {tab === "notas" && (
