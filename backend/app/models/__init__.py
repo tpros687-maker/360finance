@@ -6,6 +6,7 @@ from app.models.cliente import Cliente, CuentaCobrar, Proveedor, CuentaPagar
 from app.models.producto import Producto
 from app.models.pago import PagoHistorial
 from app.models.referencia import CotizacionDiaria, ReferenciaProductiva
+from app.models.cuaderno import NotaCuaderno, TareaCuaderno
 
 __all__ = [
     "User",
@@ -24,4 +25,6 @@ __all__ = [
     "PagoHistorial",
     "ReferenciaProductiva",
     "CotizacionDiaria",
+    "NotaCuaderno",
+    "TareaCuaderno",
 ]
