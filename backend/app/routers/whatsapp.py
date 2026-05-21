@@ -107,6 +107,58 @@ async def _get_or_create_cliente(db: AsyncSession, user_id: int, nombre: str) ->
     return cliente
 
 
+async def _marcar_cuenta_pagada(
+    db: AsyncSession, user_id: int, nombre: str, monto_raw
+) -> CuentaPagar | None:
+    """Marca como pagada la CuentaPagar pendiente del proveedor. Filtra por monto si se provee."""
+    q = (
+        select(CuentaPagar)
+        .join(Proveedor, CuentaPagar.proveedor_id == Proveedor.id)
+        .where(
+            CuentaPagar.user_id == user_id,
+            CuentaPagar.pagado == False,  # noqa: E712
+            sqlfunc.lower(Proveedor.nombre) == nombre.lower().strip(),
+        )
+    )
+    monto = _parse_monto(monto_raw)
+    if monto is not None:
+        q = q.where(CuentaPagar.monto == float(monto))
+    q = q.order_by(CuentaPagar.created_at.asc()).limit(1)
+    result = await db.execute(q)
+    cuenta = result.scalar_one_or_none()
+    if cuenta is None:
+        return None
+    cuenta.pagado = True
+    await db.commit()
+    return cuenta
+
+
+async def _marcar_cuenta_cobrada(
+    db: AsyncSession, user_id: int, nombre: str, monto_raw
+) -> CuentaCobrar | None:
+    """Marca como pagada la CuentaCobrar pendiente del cliente. Filtra por monto si se provee."""
+    q = (
+        select(CuentaCobrar)
+        .join(Cliente, CuentaCobrar.cliente_id == Cliente.id)
+        .where(
+            CuentaCobrar.user_id == user_id,
+            CuentaCobrar.pagado == False,  # noqa: E712
+            sqlfunc.lower(Cliente.nombre) == nombre.lower().strip(),
+        )
+    )
+    monto = _parse_monto(monto_raw)
+    if monto is not None:
+        q = q.where(CuentaCobrar.monto == float(monto))
+    q = q.order_by(CuentaCobrar.created_at.asc()).limit(1)
+    result = await db.execute(q)
+    cuenta = result.scalar_one_or_none()
+    if cuenta is None:
+        return None
+    cuenta.pagado = True
+    await db.commit()
+    return cuenta
+
+
 async def _get_or_create_proveedor(db: AsyncSession, user_id: int, nombre: str) -> Proveedor:
     result = await db.execute(
         select(Proveedor).where(
@@ -232,21 +284,23 @@ async def _clasificar(
     system = (
         "Sos un asistente de campo agrícola. "
         "El usuario te manda un mensaje por WhatsApp. "
-        "Clasificá en uno de estos tipos: nota, tarea, consulta, gasto, ingreso, cobro, pago.\n"
+        "Clasificá en uno de estos tipos: nota, tarea, consulta, gasto, ingreso, cobro, pago, marcar_pagado, marcar_cobrado.\n"
         "- nota: registra algo que ocurrió o una observación\n"
         "- tarea: quiere recordar hacer algo (puede incluir fecha futura)\n"
         "- consulta: hace una pregunta o pide información\n"
         "- gasto: gastó, pagó, compró o egresó dinero (sin contraparte específica)\n"
         "- ingreso: cobró, vendió, recibió dinero (sin contraparte específica)\n"
-        "- cobro: alguien le debe dinero o registra una cuenta por cobrar a un cliente\n"
-        "- pago: debe pagarle a alguien o registra una deuda con un proveedor\n\n"
+        "- cobro: alguien le debe dinero — registra cuenta por cobrar a un cliente (NUEVO cobro pendiente)\n"
+        "- pago: debe pagarle a alguien — registra deuda con un proveedor (NUEVA deuda pendiente)\n"
+        "- marcar_pagado: YA pagó algo que estaba pendiente — 'le pagué al veterinario', 'pagué la deuda con AgroInsumos'\n"
+        "- marcar_cobrado: un cliente YA le pagó algo pendiente — 'me pagó Juan', 'cobré la factura de Pedro'\n\n"
         f"Hoy es {hoy}. Usuario: {nombre_usuario}. Moneda por defecto: {moneda_usuario}.\n\n"
         f"Categorías de gasto disponibles: {cats_gasto_str}\n"
         f"Categorías de ingreso disponibles: {cats_ingreso_str}\n\n"
         "Para gasto/ingreso elegí la categoría más apropiada. Si ninguna encaja, usá 'Otros'.\n"
         "Para cobro/pago extraé el nombre de la contraparte (cliente o proveedor).\n\n"
         "Respondé SOLO con JSON válido (sin markdown, sin texto extra):\n"
-        '{"tipo": "nota|tarea|consulta|gasto|ingreso|cobro|pago", '
+        '{"tipo": "nota|tarea|consulta|gasto|ingreso|cobro|pago|marcar_pagado|marcar_cobrado", '
         '"texto": "<descripción limpia>", '
         '"fecha": "<YYYY-MM-DD o null>", '
         '"monto": <número o null>, '
@@ -508,6 +562,32 @@ async def whatsapp_webhook(
         await db.commit()
         venc_str = f" (vence {fecha_venc.strftime('%d/%m/%Y')})" if fecha_venc else ""
         return _twiml(f"✅ Pago de {moneda} ${monto:,.2f} registrado para {proveedor.nombre}{venc_str}.")
+
+    # ── Marcar pagado (CuentaPagar → pagado) ─────────────────────────────────
+    if tipo == "marcar_pagado":
+        if not contraparte:
+            return _twiml("No pude identificar el proveedor. Intentá: 'Le pagué a AgroInsumos'.")
+        cuenta = await _marcar_cuenta_pagada(db, user.id, contraparte, monto_raw)
+        if cuenta is None:
+            return _twiml(
+                f"No encontré un pago pendiente con '{contraparte}'. "
+                "Verificá el nombre o registralo primero."
+            )
+        monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
+        return _twiml(f"✅ Pago a {contraparte} por {monto_fmt} marcado como realizado.")
+
+    # ── Marcar cobrado (CuentaCobrar → pagado) ────────────────────────────────
+    if tipo == "marcar_cobrado":
+        if not contraparte:
+            return _twiml("No pude identificar el cliente. Intentá: 'Me pagó Juan Pérez'.")
+        cuenta = await _marcar_cuenta_cobrada(db, user.id, contraparte, monto_raw)
+        if cuenta is None:
+            return _twiml(
+                f"No encontré un cobro pendiente con '{contraparte}'. "
+                "Verificá el nombre o registralo primero."
+            )
+        monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
+        return _twiml(f"✅ Cobro de {contraparte} por {monto_fmt} marcado como recibido.")
 
     # ── Consulta (default) ────────────────────────────────────────────────────
     try:
