@@ -21,8 +21,8 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     raw = os.environ.get("DATABASE_URL", "")
-    # Supabase pooler usa puerto 5432 con SSL — necesita driver síncrono para migraciones
-    # Convertir a psycopg2 si es supabase
+    # Quitar ?ssl=require de la URL
+    raw = raw.split("?")[0]
     if "supabase.com" in raw or "pooler.supabase" in raw:
         raw = raw.replace("postgresql+asyncpg://", "postgresql://")
         raw = raw.replace("postgres://", "postgresql://")
@@ -44,7 +44,12 @@ async def run_async_migrations() -> None:
     url = get_url()
     if "supabase.com" in url:
         from sqlalchemy import create_engine
-        engine = create_engine(url, poolclass=pool.NullPool)
+        import ssl
+        engine = create_engine(
+            url,
+            poolclass=pool.NullPool,
+            connect_args={"sslmode": "require"},
+        )
         with engine.connect() as connection:
             context.configure(connection=connection, target_metadata=target_metadata)
             with context.begin_transaction():
