@@ -1,9 +1,12 @@
 """Webhook de WhatsApp via Twilio — recibe mensajes y los procesa con IA."""
+import base64
 import json
 import logging
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, Form
 from fastapi.responses import Response
 from sqlalchemy import func as sqlfunc, or_, select
@@ -172,6 +175,86 @@ async def _get_or_create_proveedor(db: AsyncSession, user_id: int, nombre: str) 
         db.add(proveedor)
         await db.flush()
     return proveedor
+
+
+# ── Visión: comprobantes desde imagen ────────────────────────────────────────
+
+_EXTRACCION_PROMPT = (
+    "Analizá esta factura o comprobante y extraé la información en JSON válido sin texto extra:\n"
+    '{"monto": número o null, "proveedor": string o null, "fecha": "YYYY-MM-DD" o null, '
+    '"descripcion": string breve o null, "categoria_sugerida": string o null}'
+)
+
+
+async def _procesar_imagen_comprobante(
+    media_url: str,
+    media_content_type: str,
+    user: User,
+    db: AsyncSession,
+) -> str:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            media_url,
+            auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
+        )
+        resp.raise_for_status()
+        image_bytes = resp.content
+
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    mime = media_content_type or "image/jpeg"
+
+    groq = _groq_client()
+    response = groq.chat.completions.create(
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                    {"type": "text", "text": _EXTRACCION_PROMPT},
+                ],
+            }
+        ],
+        max_tokens=512,
+        temperature=0.1,
+    )
+
+    raw = (response.choices[0].message.content or "").strip()
+    if raw.startswith("```"):
+        parts = raw.split("```", 2)
+        raw = parts[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    try:
+        data: dict = json.loads(raw)
+    except json.JSONDecodeError:
+        return "No pude leer el comprobante. Registrá el gasto manualmente."
+
+    monto = _parse_monto(data.get("monto"))
+    if monto is None:
+        return "No pude leer el monto del comprobante. Registralo manualmente."
+
+    descripcion = data.get("descripcion") or data.get("proveedor") or "Comprobante WhatsApp"
+    fecha = _parse_date(data.get("fecha")) or date.today()
+    cat_sugerida = data.get("categoria_sugerida")
+
+    cats_gasto = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
+    categoria = await _resolver_categoria(db, user.id, TipoMovimiento.gasto, cat_sugerida, cats_gasto)
+
+    db.add(Registro(
+        user_id=user.id,
+        categoria_id=categoria.id,
+        tipo=TipoMovimiento.gasto,
+        monto=monto,
+        moneda=user.moneda,
+        fecha=fecha,
+        descripcion=descripcion,
+    ))
+    await db.commit()
+
+    return f"✅ Comprobante procesado: gasto de ${monto:,.2f} en {descripcion}"
 
 
 # ── Comandos rápidos (sin Groq) ───────────────────────────────────────────────
@@ -426,7 +509,9 @@ async def _responder_consulta(mensaje: str, user: User, db: AsyncSession) -> str
 @router.post("/webhook")
 async def whatsapp_webhook(
     From: str = Form(...),
-    Body: str = Form(...),
+    Body: str = Form(""),
+    MediaUrl0: Optional[str] = Form(None),
+    MediaContentType0: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     telefono = From.replace("whatsapp:", "").strip()
@@ -439,6 +524,17 @@ async def whatsapp_webhook(
             "No encontré una cuenta asociada a este número. "
             "Registrate en finance.360rural.com"
         )
+
+    # Imagen adjunta — procesar como comprobante
+    if MediaUrl0:
+        try:
+            respuesta = await _procesar_imagen_comprobante(
+                MediaUrl0, MediaContentType0 or "image/jpeg", user, db
+            )
+        except Exception as exc:
+            logger.exception("Error procesando imagen WhatsApp: %s", exc)
+            respuesta = "Hubo un error procesando la imagen. Intentá de nuevo."
+        return _twiml(respuesta)
 
     mensaje = Body.strip()
     if not mensaje:
