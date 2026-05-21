@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.services.cotizacion import actualizar_cotizacion_hoy
-from app.services.notificaciones import enviar_notificaciones_tareas
+from app.services.notificaciones import enviar_notificaciones_tareas, enviar_resumen_diario
 from app.routers.auth import router as auth_router
 from app.routers.categorias import router as categorias_router
 from app.routers.registros import router as registros_router
@@ -38,6 +38,14 @@ async def _job_notificaciones() -> None:
             pass
 
 
+async def _job_resumen_diario() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            await enviar_resumen_diario(db)
+        except Exception:
+            pass
+
+
 _scheduler = AsyncIOScheduler()
 
 
@@ -49,6 +57,12 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # Nunca bloquear el arranque por fallo de cotización
 
+    _scheduler.add_job(
+        _job_resumen_diario,
+        CronTrigger(hour=7, minute=0, timezone="America/Montevideo"),
+        id="resumen_diario",
+        replace_existing=True,
+    )
     _scheduler.add_job(
         _job_notificaciones,
         CronTrigger(hour=8, minute=0, timezone="America/Montevideo"),
