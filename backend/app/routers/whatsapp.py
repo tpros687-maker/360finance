@@ -16,6 +16,7 @@ from app.models.cliente import Cliente, CuentaCobrar, Proveedor, CuentaPagar
 from app.models.cuaderno import NotaCuaderno, TareaCuaderno
 from app.models.registro import Registro
 from app.models.user import User
+from app.services.notificaciones import _armar_resumen
 from groq import Groq
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,98 @@ async def _get_or_create_proveedor(db: AsyncSession, user_id: int, nombre: str) 
         db.add(proveedor)
         await db.flush()
     return proveedor
+
+
+# ── Comandos rápidos (sin Groq) ───────────────────────────────────────────────
+
+_COMANDOS = {"resumen", "tareas", "gastos", "balance"}
+
+
+async def _cmd_tareas(user: User, db: AsyncSession) -> str:
+    hoy = date.today()
+    result = await db.execute(
+        select(TareaCuaderno)
+        .where(TareaCuaderno.user_id == user.id, TareaCuaderno.completada == False)  # noqa: E712
+        .order_by(TareaCuaderno.fecha_planificada.asc().nulls_last())
+        .limit(10)
+    )
+    tareas = result.scalars().all()
+    if not tareas:
+        return "✅ No tenés tareas pendientes."
+    lineas = ["📅 *Tareas pendientes:*"]
+    for t in tareas:
+        if t.fecha_planificada:
+            diff = (t.fecha_planificada - hoy).days
+            if diff < 0:
+                etiqueta = f"⚠️ Vencida ({t.fecha_planificada.strftime('%d/%m')})"
+            elif diff == 0:
+                etiqueta = "Hoy"
+            elif diff == 1:
+                etiqueta = "Mañana"
+            else:
+                etiqueta = t.fecha_planificada.strftime("%d/%m")
+        else:
+            etiqueta = "Sin fecha"
+        lineas.append(f"- {etiqueta}: {t.texto}")
+    return "\n".join(lineas)
+
+
+async def _cmd_gastos(user: User, db: AsyncSession) -> str:
+    hoy = date.today()
+    primer_dia = hoy.replace(day=1)
+    moneda = user.moneda
+    q = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(Registro.monto), 0)).where(
+            Registro.user_id == user.id,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= primer_dia,
+        )
+    )
+    total = float(q.scalar() or 0)
+    return f"💸 Gastos de {hoy.strftime('%m/%Y')}: {moneda} ${total:,.2f}"
+
+
+async def _cmd_balance(user: User, db: AsyncSession) -> str:
+    hoy = date.today()
+    primer_dia = hoy.replace(day=1)
+    moneda = user.moneda
+    gq = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(Registro.monto), 0)).where(
+            Registro.user_id == user.id,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= primer_dia,
+        )
+    )
+    iq = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(Registro.monto), 0)).where(
+            Registro.user_id == user.id,
+            Registro.tipo == TipoMovimiento.ingreso,
+            Registro.fecha >= primer_dia,
+        )
+    )
+    gastos = float(gq.scalar() or 0)
+    ingresos = float(iq.scalar() or 0)
+    balance = ingresos - gastos
+    signo = "+" if balance >= 0 else ""
+    return (
+        f"📊 Balance {hoy.strftime('%m/%Y')} ({moneda})\n"
+        f"- Ingresos: ${ingresos:,.2f}\n"
+        f"- Gastos:   ${gastos:,.2f}\n"
+        f"- Balance:  {signo}${balance:,.2f}"
+    )
+
+
+async def _handle_comando(cmd: str, user: User, db: AsyncSession) -> str | None:
+    """Devuelve la respuesta si el mensaje es un comando rápido, None si no."""
+    if cmd == "resumen":
+        return await _armar_resumen(user, db)
+    if cmd == "tareas":
+        return await _cmd_tareas(user, db)
+    if cmd == "gastos":
+        return await _cmd_gastos(user, db)
+    if cmd == "balance":
+        return await _cmd_balance(user, db)
+    return None
 
 
 # ── Clasificación con Groq ────────────────────────────────────────────────────
@@ -296,6 +389,17 @@ async def whatsapp_webhook(
     mensaje = Body.strip()
     if not mensaje:
         return _twiml("No recibí ningún mensaje. Intentá de nuevo.")
+
+    # Comandos rápidos — detección por palabra exacta, sin Groq
+    cmd = mensaje.lower().strip()
+    if cmd in _COMANDOS:
+        try:
+            respuesta = await _handle_comando(cmd, user, db)
+            if respuesta:
+                return _twiml(respuesta)
+        except Exception as exc:
+            logger.exception("Error en comando rápido '%s': %s", cmd, exc)
+            return _twiml("Hubo un error procesando tu consulta. Intentá de nuevo.")
 
     cats_gasto = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
     cats_ingreso = await _cargar_categorias(db, user.id, TipoMovimiento.ingreso)
