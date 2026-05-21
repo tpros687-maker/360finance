@@ -26,9 +26,6 @@ const AcercaDePage = lazy(() => import("@/pages/AcercaDePage"));
 const ProductosPage = lazy(() => import("@/pages/ProductosPage"));
 const PagoPage = lazy(() => import("@/pages/PagoPage"));
 const FacturacionPage = lazy(() => import("@/pages/FacturacionPage"));
-const RentabilidadPage = lazy(() => import("@/pages/RentabilidadPage"));
-const RentabilidadHaPage = lazy(() => import("@/pages/RentabilidadHaPage"));
-const RentabilidadPotreroPage = lazy(() => import("@/pages/RentabilidadPotreroPage"));
 const FlujoCajaPage = lazy(() => import("@/pages/FlujoCajaPage"));
 const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
 const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
@@ -69,9 +66,6 @@ function AppRoutes() {
             <Route path="/acerca" element={<AcercaDePage />} />
             <Route path="/productos" element={<ProductosPage />} />
             <Route path="/facturacion" element={<FacturacionPage />} />
-            <Route path="/rentabilidad" element={<RentabilidadPage />} />
-            <Route path="/rentabilidad-ha" element={<RentabilidadHaPage />} />
-            <Route path="/rentabilidad-ha/potreros/:id" element={<RentabilidadPotreroPage />} />
             <Route path="/flujo-caja" element={<FlujoCajaPage />} />
             <Route path="/alertas" element={<Navigate to="/dashboard" replace />} />
             <Route path="/recomendaciones" element={<RecomendacionesPage />} />
