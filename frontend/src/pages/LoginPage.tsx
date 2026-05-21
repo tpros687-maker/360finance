@@ -54,7 +54,7 @@ export default function LoginPage() {
             <Leaf className="h-6 w-6 text-brand-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">
-            360 <span className="text-brand-400">Finance</span>
+            360 Agro <span className="text-brand-400">Finance</span>
           </h1>
         </div>
 

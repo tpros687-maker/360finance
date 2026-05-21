@@ -20,7 +20,7 @@ export function AppLayout() {
             <Menu className="h-6 w-6" />
           </button>
           <span className="text-base font-bold text-agro-text">
-            360 <span className="text-agro-primary">Finance</span>
+            360 Agro <span className="text-agro-primary">Finance</span>
           </span>
         </header>
 

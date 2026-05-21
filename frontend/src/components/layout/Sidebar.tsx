@@ -204,7 +204,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Leaf className="h-5 w-5 text-agro-primary" />
           </div>
           <span className="text-lg font-bold text-agro-text tracking-tight">
-            360 <span className="text-agro-primary">Finance</span>
+            360 Agro <span className="text-agro-primary">Finance</span>
           </span>
         </div>
 

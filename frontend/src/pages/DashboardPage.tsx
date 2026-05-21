@@ -695,7 +695,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-agro-text">
           Hola, {user?.nombre ?? "…"} 👋
         </h1>
-        <p className="text-agro-muted mt-1">Panel de control — 360 Finance</p>
+        <p className="text-agro-muted mt-1">Panel de control — 360 Agro Finance</p>
       </div>
 
       {isEmpty ? (

@@ -55,7 +55,7 @@ export default function RegisterPage() {
       setUser(user);
     },
     onSuccess: () => {
-      toast({ title: "Cuenta creada", description: "Bienvenido a 360 Finance" });
+      toast({ title: "Cuenta creada", description: "Bienvenido a 360 Agro Finance" });
       navigate("/dashboard");
     },
     onError: (err) => {
@@ -71,7 +71,7 @@ export default function RegisterPage() {
             <Leaf className="h-6 w-6 text-brand-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">
-            360 <span className="text-brand-400">Finance</span>
+            360 Agro <span className="text-brand-400">Finance</span>
           </h1>
         </div>
 

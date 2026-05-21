@@ -108,10 +108,10 @@ export default function AcercaDePage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-agro-primary/10">
               <Leaf className="h-5 w-5 text-agro-primary" />
             </div>
-            <h1 className="text-2xl font-bold text-agro-text">¿Qué es 360 Finance?</h1>
+            <h1 className="text-2xl font-bold text-agro-text">¿Qué es 360 Agro Finance?</h1>
           </div>
           <p className="text-agro-muted text-sm leading-relaxed max-w-xl">
-            360 Finance es una herramienta de gestión financiera y operativa pensada para el mundo agropecuario.
+            360 Agro Finance es una herramienta de gestión financiera y operativa pensada para el mundo agropecuario.
             Combiná el control de tu campo con la administración de tu negocio rural en una sola plataforma.
           </p>
         </div>

@@ -54,7 +54,7 @@ export default function PagoPage() {
             <Leaf className="h-5 w-5 text-agro-primary" />
           </div>
           <h1 className="text-xl font-bold text-agro-text">
-            360 Finance <span className="text-agro-primary">— Plan Pro</span>
+            360 Agro Finance <span className="text-agro-primary">— Plan Pro</span>
           </h1>
         </div>
 

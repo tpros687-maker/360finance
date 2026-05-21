@@ -82,7 +82,7 @@ export default function OnboardingPage() {
           <Leaf className="h-5 w-5 text-brand-400" />
         </div>
         <span className="text-xl font-bold text-white">
-          360 <span className="text-brand-400">Finance</span>
+          360 Agro <span className="text-brand-400">Finance</span>
         </span>
       </div>
 
@@ -105,7 +105,7 @@ export default function OnboardingPage() {
         {step === 1 && (
           <>
             <h1 className="text-2xl font-bold text-white text-center mb-2">
-              ¿Cómo usás 360 Finance?
+              ¿Cómo usás 360 Agro Finance?
             </h1>
             <p className="text-slate-400 text-center mb-8">
               Podés seleccionar ambas opciones a la vez
@@ -196,7 +196,7 @@ export default function OnboardingPage() {
         {step === 2 && (
           <>
             <h1 className="text-2xl font-bold text-white text-center mb-2">
-              ¿Qué tenés disponible en 360 Finance?
+              ¿Qué tenés disponible en 360 Agro Finance?
             </h1>
             <p className="text-slate-400 text-center mb-8">
               Según lo que seleccionaste, estas son tus herramientas
