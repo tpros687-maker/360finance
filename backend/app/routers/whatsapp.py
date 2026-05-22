@@ -947,11 +947,11 @@ async def whatsapp_webhook(
         # ── Flujo mover ganado ────────────────────────────────────────────────
 
         if estado_actual == "esperando_tipo_mov":
-            if cmd == "1":
+            if cmd_escape == "1":
                 potreros_str = await _listar_potreros(db, user.id)
                 _set_estado(telefono, "esperando_potrero_franja")
                 return _twiml(f"¿En qué potrero?\nTus potreros: {potreros_str}")
-            if cmd == "2":
+            if cmd_escape == "2":
                 potreros_str = await _listar_potreros(db, user.id)
                 _set_estado(telefono, "esperando_potrero_origen")
                 return _twiml(f"¿De qué potrero *sale* el ganado?\nTus potreros: {potreros_str}")
