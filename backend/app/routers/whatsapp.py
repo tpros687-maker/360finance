@@ -721,15 +721,8 @@ async def whatsapp_webhook(
     # ── Comandos directos — PRIMERO, antes de cualquier otra lógica ───────────
     cmd_directo = mensaje.lower().strip()
     if cmd_directo in _COMANDOS:
-        logger.info("Comando directo detectado: '%s'", cmd_directo)
-        _clear_estado(telefono)
-        try:
-            respuesta = await _handle_comando(cmd_directo, user, db)
-            logger.info("Respuesta generada: %d chars", len(respuesta or ""))
-            return _twiml(respuesta or "OK")
-        except Exception as exc:
-            logger.exception("Error en comando directo '%s': %s", cmd_directo, exc)
-            return _twiml(f"Error: {type(exc).__name__}: {str(exc)[:100]}")
+        # TEST TEMPORAL: respuesta hardcodeada sin llamar a nada
+        return _twiml(f"CMD:{cmd_directo} recibido OK")
 
     # ── Manejo de estados del menú guiado ─────────────────────────────────────
     estado_actual = _get_estado(telefono)
