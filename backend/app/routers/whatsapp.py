@@ -711,9 +711,9 @@ async def whatsapp_webhook(
             if len(texto_buscar) < 4:
                 tarea_encontrada = tareas_pendientes[0]
         if tarea_encontrada:
-            from datetime import datetime
+            from datetime import datetime as dt
             tarea_encontrada.completada = True
-            tarea_encontrada.completed_at = datetime.utcnow().date().isoformat()
+            tarea_encontrada.completed_at = dt.utcnow()
             await db.commit()
             return _twiml(f"✅ Tarea completada: {tarea_encontrada.texto}")
         return _twiml(
