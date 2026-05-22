@@ -155,6 +155,7 @@ export default function MapaPage() {
   const mapReadyRef = useRef(false);
   const potrerosRef = useRef<Potrero[]>([]);
   const franjasReadyRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnPoints, setDrawnPoints] = useState(0);
 
@@ -383,6 +384,7 @@ export default function MapaPage() {
       });
 
       franjasReadyRef.current = true;
+      setMapReady(true);
 
       // Hover tooltip
       map.on("mouseenter", "potreros-fill", (e) => {
@@ -556,7 +558,7 @@ export default function MapaPage() {
     byPotrero.forEach((arr) => arr.sort((a, b) => a.numero - b.numero));
 
     source.setData(buildFranjaStrips(potreros, byPotrero));
-  }, [franjasMapaData, potreros]);
+  }, [franjasMapaData, potreros, mapReady]);
 
   // ── Sync descanso HTML markers ─────────────────────────────────────────────
   // Emoji markers for potreros in descanso, positioned at polygon center.

@@ -381,6 +381,30 @@ async def _ensure_franjas(potrero: Potrero, db: AsyncSession) -> list[FranjaEsta
     return existentes
 
 
+@router.get("/franjas-mapa", response_model=list[FranjaEstadoRead])
+async def get_franjas_mapa(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Devuelve todas las franjas del usuario para renderizar en el mapa."""
+    potreros_q = await db.execute(
+        select(Potrero).where(
+            Potrero.user_id == current_user.id,
+            Potrero.tiene_franjas == True,  # noqa: E712
+            Potrero.cantidad_franjas.isnot(None),
+        )
+    )
+    potreros_con_franjas = list(potreros_q.scalars().all())
+    result = []
+    for p in potreros_con_franjas:
+        franjas = await _ensure_franjas(p, db)
+        for f in franjas:
+            result.append(_franja_to_read(f, p.dias_por_franja, len(franjas)))
+    if any(p for p in potreros_con_franjas):
+        await db.commit()
+    return result
+
+
 @router.get("/{potrero_id}/franjas", response_model=list[FranjaEstadoRead])
 async def get_franjas(
     potrero_id: int,
