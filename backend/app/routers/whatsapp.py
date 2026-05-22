@@ -872,10 +872,13 @@ async def whatsapp_webhook(
     if not mensaje:
         return _twiml("No recibí ningún mensaje. Intentá de nuevo.")
 
-    logger.info("Webhook recibido: telefono=%s mensaje='%s'", telefono, mensaje[:50])
+    print(f"[WA] tel={telefono} msg={mensaje[:40]!r} user={user.id if user else None}", flush=True)
+    logger.warning("Webhook recibido: telefono=%s mensaje='%s'", telefono, mensaje[:50])
 
     try:
-        return await _procesar_mensaje(mensaje, telefono, user, db)
+        resp = await _procesar_mensaje(mensaje, telefono, user, db)
+        print(f"[WA] respuesta len={len(resp.body) if hasattr(resp,'body') else '?'}", flush=True)
+        return resp
     except Exception as exc:
         logger.exception("Error no capturado en webhook WhatsApp: %s", exc)
         _clear_estado(telefono)
