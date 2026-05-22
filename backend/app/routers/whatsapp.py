@@ -2,6 +2,7 @@
 import base64
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Optional
@@ -17,6 +18,7 @@ from app.database import get_db
 from app.models.categoria import Categoria, TipoMovimiento
 from app.models.cliente import Cliente, CuentaCobrar, Proveedor, CuentaPagar
 from app.models.cuaderno import NotaCuaderno, TareaCuaderno
+from app.models.mapa import FranjaEstado, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
 from app.services.notificaciones import _armar_resumen, _armar_resumen_semanal
@@ -291,9 +293,17 @@ def _get_estado(telefono: str) -> str | None:
     return None
 
 
-def _set_estado(telefono: str, estado: str) -> None:
+def _get_estado_data(telefono: str) -> dict:
+    s = _estados.get(telefono)
+    if s and s["expires"] > datetime.utcnow():
+        return s.get("data", {})
+    return {}
+
+
+def _set_estado(telefono: str, estado: str, data: dict | None = None) -> None:
     _estados[telefono] = {
         "estado": estado,
+        "data": data or {},
         "expires": datetime.utcnow() + timedelta(minutes=_TIMEOUT_MENU),
     }
 
@@ -311,7 +321,8 @@ _MENU_TEXTO = (
     "5️⃣  Registrar ingreso\n"
     "6️⃣  Ver tareas pendientes\n"
     "7️⃣  Balance del mes\n"
-    "8️⃣  Resumen últimos 7 días\n\n"
+    "8️⃣  Resumen últimos 7 días\n"
+    "9️⃣  Mover ganado\n\n"
     "Respondé con el número de la opción."
 )
 
@@ -321,12 +332,13 @@ _MENU_OPCIONES = {
     "3": ("esperando_realizada", "☑️ ¿Qué tarea/s completaste?\nEscribí parte del nombre, una por línea si son varias."),
     "4": ("esperando_gasto",   "💸 Describí el gasto (ej: 1500 en nafta)"),
     "5": ("esperando_ingreso", "💰 Describí el ingreso (ej: vendí un novillo en 45000)"),
+    "9": ("esperando_tipo_mov", "🐄 ¿Qué tipo de movimiento?\n1️⃣ Mover entre franjas (mismo potrero)\n2️⃣ Mover entre potreros"),
 }
 
 
 # ── Comandos rápidos (sin Groq) ───────────────────────────────────────────────
 
-_COMANDOS = {"resumen", "tareas", "gastos", "balance", "ayuda", "menu", "menú"}
+_COMANDOS = {"resumen", "tareas", "gastos", "balance", "ayuda", "menu", "menú", "mover"}
 
 # Palabras interrogativas en español — si el mensaje empieza con alguna → consulta
 _INTERROGATIVAS = (
@@ -499,6 +511,143 @@ def _cmd_ayuda() -> str:
         "  cuánto gasté este mes?\n\n"
         "📊 *Comandos:*\n"
         "  resumen · tareas · gastos · balance · ayuda"
+    )
+
+
+# ── Helpers movimiento de ganado ─────────────────────────────────────────────
+
+_MAPA_ESPECIE: dict[str, str] = {
+    "bovino": "bovino", "novillo": "bovino", "novillos": "bovino",
+    "vaca": "bovino", "vacas": "bovino", "toro": "bovino", "toros": "bovino",
+    "ternero": "bovino", "terneros": "bovino", "ternera": "bovino", "terneras": "bovino",
+    "vaquillona": "bovino", "vaquillonas": "bovino",
+    "ovino": "ovino", "oveja": "ovino", "ovejas": "ovino",
+    "cordero": "ovino", "corderos": "ovino", "borrego": "ovino",
+    "equino": "equino", "caballo": "equino", "caballos": "equino",
+    "yegua": "equino", "yeguas": "equino", "potro": "equino", "potros": "equino",
+    "porcino": "porcino", "cerdo": "porcino", "cerdos": "porcino",
+    "chancho": "porcino", "chanchos": "porcino",
+}
+
+
+def _parse_especie_cantidad(texto: str) -> tuple[int, str] | None:
+    """'50 novillos' o 'novillos 50' → (50, 'bovino')."""
+    lower = texto.lower().strip()
+    m = re.search(r'(\d+)\s+(\w+)', lower) or re.search(r'(\w+)\s+(\d+)', lower)
+    if not m:
+        return None
+    a, b = m.groups()
+    try:
+        cantidad, palabra = int(a), b
+    except ValueError:
+        try:
+            cantidad, palabra = int(b), a
+        except ValueError:
+            return None
+    especie = _MAPA_ESPECIE.get(palabra, palabra)
+    return (cantidad, especie)
+
+
+def _parse_franjas(texto: str) -> tuple[int, int] | None:
+    """'F1 a F2', '1 a 2', 'de 1 a 2' → (1, 2)."""
+    lower = re.sub(r'f(\d+)', r'\1', texto.lower().strip())
+    m = re.search(r'(\d+)\s+a\s+(\d+)', lower) or re.search(r'(\d+)\D+(\d+)', lower)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+    return None
+
+
+async def _buscar_potrero(db: AsyncSession, user_id: int, nombre: str) -> Potrero | None:
+    """Busca potrero por nombre exacto o parcial."""
+    result = await db.execute(select(Potrero).where(Potrero.user_id == user_id))
+    potreros = list(result.scalars().all())
+    lower = nombre.lower().strip()
+    for p in potreros:
+        if p.nombre.lower() == lower:
+            return p
+    for p in potreros:
+        if lower in p.nombre.lower() or p.nombre.lower() in lower:
+            return p
+    return None
+
+
+async def _listar_potreros(db: AsyncSession, user_id: int) -> str:
+    result = await db.execute(
+        select(Potrero).where(Potrero.user_id == user_id).order_by(Potrero.nombre)
+    )
+    potreros = list(result.scalars().all())
+    if not potreros:
+        return "(sin potreros registrados)"
+    return ", ".join(p.nombre for p in potreros)
+
+
+async def _ejecutar_mover_franjas(
+    db: AsyncSession, potrero: Potrero, desde: int, hasta: int
+) -> str:
+    """Mueve el ganado de franja `desde` a franja `hasta` en el mismo potrero."""
+    res_d = await db.execute(
+        select(FranjaEstado).where(
+            FranjaEstado.potrero_id == potrero.id,
+            FranjaEstado.numero == desde,
+        )
+    )
+    res_h = await db.execute(
+        select(FranjaEstado).where(
+            FranjaEstado.potrero_id == potrero.id,
+            FranjaEstado.numero == hasta,
+        )
+    )
+    f_desde = res_d.scalar_one_or_none()
+    f_hasta = res_h.scalar_one_or_none()
+
+    if not f_desde:
+        return f"No existe la franja {desde} en {potrero.nombre}."
+    if not f_hasta:
+        return f"No existe la franja {hasta} en {potrero.nombre}."
+    if not f_desde.en_uso:
+        return f"F{desde} no está en uso actualmente. Verificá el estado en la app."
+
+    hoy = date.today()
+    f_desde.en_uso = False
+    f_desde.fecha_inicio_descanso = hoy
+    f_hasta.en_uso = True
+    f_hasta.fecha_entrada = hoy
+    f_hasta.fecha_inicio_descanso = None
+
+    await db.commit()
+    return (
+        f"✅ Ganado movido en *{potrero.nombre}*\n"
+        f"F{desde} → inicia descanso 💤\n"
+        f"F{hasta} → en uso 🟢\n"
+        "Mandá *menu* para seguir."
+    )
+
+
+async def _ejecutar_mover_potrero(
+    db: AsyncSession,
+    user: User,
+    potrero_origen: Potrero,
+    potrero_destino: Potrero,
+    cantidad: int,
+    especie: str,
+) -> str:
+    """Crea un MovimientoGanado entre dos potreros y lo ejecuta hoy."""
+    mov = MovimientoGanado(
+        user_id=user.id,
+        potrero_origen_id=potrero_origen.id,
+        potrero_destino_id=potrero_destino.id,
+        cantidad=cantidad,
+        especie=especie,
+        fecha_programada=date.today(),
+        fecha_ejecutada=date.today(),
+        estado="ejecutado",
+    )
+    db.add(mov)
+    await db.commit()
+    return (
+        f"✅ Movimiento registrado\n"
+        f"{cantidad} {especie} de *{potrero_origen.nombre}* → *{potrero_destino.nombre}*\n"
+        "Mandá *menu* para seguir."
     )
 
 
@@ -795,6 +944,90 @@ async def whatsapp_webhook(
             respuesta_lineas.append("Mandá *menu* para seguir.")
             return _twiml("\n".join(respuesta_lineas))
 
+        # ── Flujo mover ganado ────────────────────────────────────────────────
+
+        if estado_actual == "esperando_tipo_mov":
+            if cmd == "1":
+                potreros_str = await _listar_potreros(db, user.id)
+                _set_estado(telefono, "esperando_potrero_franja")
+                return _twiml(f"¿En qué potrero?\nTus potreros: {potreros_str}")
+            if cmd == "2":
+                potreros_str = await _listar_potreros(db, user.id)
+                _set_estado(telefono, "esperando_potrero_origen")
+                return _twiml(f"¿De qué potrero *sale* el ganado?\nTus potreros: {potreros_str}")
+            return _twiml("Respondé 1 (entre franjas) o 2 (entre potreros).")
+
+        if estado_actual == "esperando_potrero_franja":
+            potrero = await _buscar_potrero(db, user.id, mensaje)
+            if not potrero:
+                potreros_str = await _listar_potreros(db, user.id)
+                _set_estado(telefono, "esperando_potrero_franja")
+                return _twiml(f"No encontré '{mensaje}'. Tus potreros: {potreros_str}")
+            if not potrero.tiene_franjas or not potrero.cantidad_franjas:
+                return _twiml(f"{potrero.nombre} no tiene franjas configuradas.")
+            _set_estado(telefono, "esperando_desde_hasta_franja", {"potrero_id": potrero.id, "potrero_nombre": potrero.nombre})
+            return _twiml(
+                f"*{potrero.nombre}* — {potrero.cantidad_franjas} franjas\n"
+                "¿De qué franja a qué franja? (ej: *F1 a F2*)"
+            )
+
+        if estado_actual == "esperando_desde_hasta_franja":
+            data = _get_estado_data(telefono)
+            franjas = _parse_franjas(mensaje)
+            if not franjas:
+                _set_estado(telefono, "esperando_desde_hasta_franja", data)
+                return _twiml("No entendí. Escribí el formato: *F1 a F2* o *1 a 2*")
+            desde, hasta = franjas
+            potrero = await _buscar_potrero(db, user.id, data.get("potrero_nombre", ""))
+            if not potrero:
+                return _twiml("Error al buscar el potrero. Empezá de nuevo con *mover*.")
+            respuesta = await _ejecutar_mover_franjas(db, potrero, desde, hasta)
+            return _twiml(respuesta)
+
+        if estado_actual == "esperando_potrero_origen":
+            potrero_origen = await _buscar_potrero(db, user.id, mensaje)
+            if not potrero_origen:
+                potreros_str = await _listar_potreros(db, user.id)
+                _set_estado(telefono, "esperando_potrero_origen")
+                return _twiml(f"No encontré '{mensaje}'. Tus potreros: {potreros_str}")
+            potreros_str = await _listar_potreros(db, user.id)
+            _set_estado(telefono, "esperando_potrero_destino", {"origen_id": potrero_origen.id, "origen_nombre": potrero_origen.nombre})
+            return _twiml(f"¿A qué potrero *llega* el ganado?\nTus potreros: {potreros_str}")
+
+        if estado_actual == "esperando_potrero_destino":
+            data = _get_estado_data(telefono)
+            potrero_destino = await _buscar_potrero(db, user.id, mensaje)
+            if not potrero_destino:
+                potreros_str = await _listar_potreros(db, user.id)
+                _set_estado(telefono, "esperando_potrero_destino", data)
+                return _twiml(f"No encontré '{mensaje}'. Tus potreros: {potreros_str}")
+            if potrero_destino.id == data.get("origen_id"):
+                _set_estado(telefono, "esperando_potrero_destino", data)
+                return _twiml("El destino debe ser diferente al origen. ¿A qué potrero va el ganado?")
+            _set_estado(telefono, "esperando_especie_cantidad", {
+                **data,
+                "destino_id": potrero_destino.id,
+                "destino_nombre": potrero_destino.nombre,
+            })
+            return _twiml(
+                f"*{data.get('origen_nombre')}* → *{potrero_destino.nombre}*\n"
+                "¿Cuántos animales y de qué especie?\n(ej: *50 novillos*, *30 ovejas*)"
+            )
+
+        if estado_actual == "esperando_especie_cantidad":
+            data = _get_estado_data(telefono)
+            parsed = _parse_especie_cantidad(mensaje)
+            if not parsed:
+                _set_estado(telefono, "esperando_especie_cantidad", data)
+                return _twiml("No entendí. Escribí así: *50 novillos* o *30 ovejas*")
+            cantidad, especie = parsed
+            potrero_origen = await _buscar_potrero(db, user.id, data.get("origen_nombre", ""))
+            potrero_destino = await _buscar_potrero(db, user.id, data.get("destino_nombre", ""))
+            if not potrero_origen or not potrero_destino:
+                return _twiml("Error al buscar los potreros. Empezá de nuevo con *mover*.")
+            respuesta = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie)
+            return _twiml(respuesta)
+
         if estado_actual in ("esperando_gasto", "esperando_ingreso"):
             tipo_forzado = "gasto" if estado_actual == "esperando_gasto" else "ingreso"
             cats_g = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
@@ -836,6 +1069,15 @@ async def whatsapp_webhook(
     # ── Comandos rápidos — detección por palabra exacta, sin Groq ─────────────
     cmd = mensaje.lower().strip()
 
+    # Comando directo "mover" — inicia el flujo con estado
+    if cmd == "mover":
+        _set_estado(telefono, "esperando_tipo_mov")
+        return _twiml(
+            "🐄 ¿Qué tipo de movimiento?\n"
+            "1️⃣ Mover entre franjas (mismo potrero)\n"
+            "2️⃣ Mover entre potreros"
+        )
+
     # Opciones del menú directas (sin estado)
     if cmd == "6":
         return _twiml(await _cmd_tareas(user, db))
@@ -843,6 +1085,15 @@ async def whatsapp_webhook(
         return _twiml(await _cmd_balance(user, db))
     if cmd == "8":
         return _twiml(await _armar_resumen_semanal(user, db))
+    if cmd == "9":
+        potreros_str = await _listar_potreros(db, user.id)
+        _set_estado(telefono, "esperando_tipo_mov")
+        return _twiml(
+            "🐄 ¿Qué tipo de movimiento?\n"
+            "1️⃣ Mover entre franjas (mismo potrero)\n"
+            "2️⃣ Mover entre potreros\n\n"
+            f"Tus potreros: {potreros_str}"
+        )
 
     # Opciones del menú con estado (1-5)
     if cmd in _MENU_OPCIONES:
