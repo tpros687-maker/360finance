@@ -20,6 +20,7 @@ from app.models.mapa import FranjaEstado, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
 from app.services.notificaciones import _armar_resumen, _armar_resumen_semanal
+from app.routers.movimientos import _transferir_animales
 from groq import Groq
 
 logger = logging.getLogger(__name__)
@@ -538,8 +539,8 @@ _MAPA_ESPECIE: dict[str, str] = {
 }
 
 
-def _parse_especie_cantidad(texto: str) -> tuple[int, str] | None:
-    """'50 novillos' o 'novillos 50' → (50, 'bovino')."""
+def _parse_especie_cantidad(texto: str) -> tuple[int, str, str] | None:
+    """'50 novillos' → (50, 'bovino', 'novillos')  — (cantidad, especie_db, etiqueta)."""
     lower = texto.lower().strip()
     m = re.search(r'(\d+)\s+(\w+)', lower) or re.search(r'(\w+)\s+(\d+)', lower)
     if not m:
@@ -553,11 +554,11 @@ def _parse_especie_cantidad(texto: str) -> tuple[int, str] | None:
         except ValueError:
             return None
     especie = _MAPA_ESPECIE.get(palabra, palabra)
-    return (cantidad, especie)
+    return (cantidad, especie, palabra)
 
 
-def _parse_multiples_especies(texto: str) -> list[tuple[int, str]]:
-    """'30 vaquillonas, 20 terneros' → [(30, 'bovino'), (20, 'bovino')]."""
+def _parse_multiples_especies(texto: str) -> list[tuple[int, str, str]]:
+    """'30 vaquillonas, 20 terneros' → [(30, 'bovino', 'vaquillonas'), ...]."""
     partes = re.split(r'[,y]', texto)
     resultados = []
     for parte in partes:
@@ -661,6 +662,7 @@ async def _ejecutar_mover_potrero(
     potrero_destino: Potrero,
     cantidad: int,
     especie: str,
+    etiqueta: str | None = None,
 ) -> str:
     """Crea un MovimientoGanado entre dos potreros y lo ejecuta hoy."""
     mov = MovimientoGanado(
@@ -674,8 +676,11 @@ async def _ejecutar_mover_potrero(
         estado="ejecutado",
     )
     db.add(mov)
+    await db.flush()  # obtener mov.id
+    await _transferir_animales(mov, user.id, db)
     await db.commit()
-    return f"✅ {cantidad} {especie}: *{potrero_origen.nombre}* → *{potrero_destino.nombre}*"
+    label = etiqueta or especie
+    return f"✅ {cantidad} {label}: *{potrero_origen.nombre}* → *{potrero_destino.nombre}*"
 
 
 async def _handle_comando(cmd: str, user: User, db: AsyncSession) -> str | None:
@@ -1121,8 +1126,8 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
                 _set_estado(telefono, "esperando_especie_cantidad", data)
                 return "Error al buscar los potreros. Intentá de nuevo."
             respuestas = []
-            for cantidad, especie in lista_parsed:
-                r = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie)
+            for cantidad, especie, etiqueta in lista_parsed:
+                r = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie, etiqueta)
                 respuestas.append(r)
             respuestas.append("Mandá *menu* para seguir.")
             return "\n".join(respuestas)
