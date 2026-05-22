@@ -690,6 +690,11 @@ async def whatsapp_webhook(
     MediaContentType0: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
+    # ── DEBUG TOTAL: responder siempre con echo para diagnosticar ────────────────
+    logger.info("WEBHOOK DEBUG: From=%r Body=%r len=%d repr=%r", From, Body, len(Body), Body[:30])
+    return _twiml(f"ECHO: '{Body.strip()}' ({len(Body.strip())} chars)")
+    # ── FIN DEBUG ─────────────────────────────────────────────────────────────
+
     telefono = From.replace("whatsapp:", "").strip()
 
     result = await db.execute(select(User).where(User.telefono == telefono))
