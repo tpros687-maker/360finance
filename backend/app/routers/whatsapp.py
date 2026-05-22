@@ -1308,26 +1308,3 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
     except Exception as exc:
         logger.exception("Error respondiendo consulta WhatsApp: %s", exc)
         respuesta = "No pude procesar tu consulta. Intentá desde la app."
-    return _twiml(respuesta)
-            )
-        monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
-        return _twiml(f"✅ Pago a {contraparte} por {monto_fmt} marcado como realizado.")
-
-    if tipo == "marcar_cobrado":
-        if not contraparte:
-            return _twiml("No pude identificar el cliente. Intentá: 'Me pagó Juan Pérez'.")
-        cuenta = await _marcar_cuenta_cobrada(db, user.id, contraparte, monto_raw)
-        if cuenta is None:
-            return _twiml(
-                f"No encontré un cobro pendiente con '{contraparte}'. "
-                "Verificá el nombre o registralo primero."
-            )
-        monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
-        return _twiml(f"✅ Cobro de {contraparte} por {monto_fmt} marcado como recibido.")
-
-    try:
-        respuesta = await _responder_consulta(mensaje, user, db)
-    except Exception as exc:
-        logger.exception("Error respondiendo consulta WhatsApp: %s", exc)
-        respuesta = "No pude procesar tu consulta. Intentá desde la app."
-    return _twiml(respuesta)
