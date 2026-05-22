@@ -316,9 +316,9 @@ _MENU_TEXTO = (
 )
 
 _MENU_OPCIONES = {
-    "1": ("esperando_nota",    "📝 ¿Qué querés anotar?"),
-    "2": ("esperando_tarea",   "📅 ¿Qué tarea querés agregar?"),
-    "3": ("esperando_realizada", "☑️ ¿Qué tarea completaste? (escribí parte del nombre)"),
+    "1": ("esperando_nota",    "📝 ¿Qué querés anotar?\nPodés escribir varias en líneas separadas."),
+    "2": ("esperando_tarea",   "📅 ¿Qué tarea/s querés agregar?\nEscribí una por línea si son varias."),
+    "3": ("esperando_realizada", "☑️ ¿Qué tarea/s completaste?\nEscribí parte del nombre, una por línea si son varias."),
     "4": ("esperando_gasto",   "💸 Describí el gasto (ej: 1500 en nafta)"),
     "5": ("esperando_ingreso", "💰 Describí el ingreso (ej: vendí un novillo en 45000)"),
 }
@@ -723,17 +723,25 @@ async def whatsapp_webhook(
         _clear_estado(telefono)  # consumir estado
 
         if estado_actual == "esperando_nota":
-            db.add(NotaCuaderno(user_id=user.id, texto=mensaje))
+            lineas = [l.strip().lstrip("-•*").strip() for l in mensaje.splitlines() if l.strip()]
+            for linea in lineas:
+                db.add(NotaCuaderno(user_id=user.id, texto=linea))
             await db.commit()
-            return _twiml("✅ Nota guardada. Mandá *menu* para seguir.")
+            if len(lineas) == 1:
+                return _twiml("✅ Nota guardada. Mandá *menu* para seguir.")
+            return _twiml(f"✅ {len(lineas)} notas guardadas. Mandá *menu* para seguir.")
 
         if estado_actual == "esperando_tarea":
-            db.add(TareaCuaderno(user_id=user.id, texto=mensaje))
+            lineas = [l.strip().lstrip("-•*").strip() for l in mensaje.splitlines() if l.strip()]
+            for linea in lineas:
+                db.add(TareaCuaderno(user_id=user.id, texto=linea))
             await db.commit()
-            return _twiml("✅ Tarea guardada. Mandá *menu* para seguir.")
+            if len(lineas) == 1:
+                return _twiml("✅ Tarea guardada. Mandá *menu* para seguir.")
+            return _twiml(f"✅ {len(lineas)} tareas guardadas. Mandá *menu* para seguir.")
 
         if estado_actual == "esperando_realizada":
-            texto_buscar = mensaje.lower()
+            lineas = [l.strip().lstrip("-•*").strip() for l in mensaje.splitlines() if l.strip()]
             result_t = await db.execute(
                 select(TareaCuaderno).where(
                     TareaCuaderno.user_id == user.id,
@@ -741,16 +749,32 @@ async def whatsapp_webhook(
                 ).order_by(TareaCuaderno.created_at.desc())
             )
             tareas_p = result_t.scalars().all()
-            encontrada = next((t for t in tareas_p if texto_buscar in t.texto.lower()), None)
-            if encontrada:
-                encontrada.completada = True
-                encontrada.completed_at = datetime.utcnow()
+
+            completadas = []
+            no_encontradas = []
+            for buscar in lineas:
+                encontrada = next((t for t in tareas_p if buscar.lower() in t.texto.lower()), None)
+                if encontrada:
+                    encontrada.completada = True
+                    encontrada.completed_at = datetime.utcnow()
+                    completadas.append(encontrada.texto)
+                else:
+                    no_encontradas.append(buscar)
+
+            if completadas:
                 await db.commit()
-                return _twiml(f"✅ Tarea completada: {encontrada.texto}\nMandá *menu* para seguir.")
-            return _twiml(
-                f"No encontré tarea pendiente con '{mensaje}'.\n"
-                "Mandá *tareas* para ver la lista completa."
-            )
+
+            respuesta_lineas = []
+            if completadas:
+                respuesta_lineas.append(f"✅ Completadas ({len(completadas)}):")
+                for t in completadas:
+                    respuesta_lineas.append(f"  - {t}")
+            if no_encontradas:
+                respuesta_lineas.append(f"⚠️ No encontradas ({len(no_encontradas)}):")
+                for t in no_encontradas:
+                    respuesta_lineas.append(f"  - {t}")
+            respuesta_lineas.append("Mandá *menu* para seguir.")
+            return _twiml("\n".join(respuesta_lineas))
 
         if estado_actual in ("esperando_gasto", "esperando_ingreso"):
             tipo_forzado = "gasto" if estado_actual == "esperando_gasto" else "ingreso"
