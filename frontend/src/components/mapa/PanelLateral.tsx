@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMapaStore } from "@/store/mapaStore";
-import { updatePotrero, deletePotrero, getMovimientosByPotrero } from "@/lib/potrerosApi";
+import { updatePotrero, deletePotrero, getMovimientosByPotrero, getFranjas, moverFranja, updateFranja } from "@/lib/potrerosApi";
 import { getAnimales, createAnimal, deleteAnimal } from "@/lib/animalesApi";
 import { getAplicaciones, createAplicacion, deleteAplicacion } from "@/lib/aplicacionesApi";
-import type { PotreroUpdate, AnimalCreate, EstadoPasto } from "@/types/mapa";
+import type { FranjaEstado, PotreroUpdate, AnimalCreate, EstadoPasto } from "@/types/mapa";
 import { toast } from "@/hooks/useToast";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -46,6 +46,144 @@ function formatFecha(fecha: string): string {
     month: "2-digit",
     year: "2-digit",
   });
+}
+
+// ── FranjasGrid ───────────────────────────────────────────────────────────────
+
+const FRANJA_ESTADO_CONFIG = {
+  en_uso:      { label: "En uso",       bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500", emoji: "🟢" },
+  descansando: { label: "Descansando",  bg: "bg-blue-50",     text: "text-blue-700",    dot: "bg-blue-400",   emoji: "💤" },
+  lista:       { label: "Lista",        bg: "bg-amber-50",    text: "text-amber-700",   dot: "bg-amber-400",  emoji: "✅" },
+  libre:       { label: "Libre",        bg: "bg-slate-50",    text: "text-slate-500",   dot: "bg-slate-300",  emoji: "⬜" },
+} as const;
+
+function FranjasGrid({
+  potreroId,
+  diasPorFranjaDefault,
+  qc,
+}: {
+  potreroId: number;
+  diasPorFranjaDefault: number | undefined;
+  qc: ReturnType<typeof useQueryClient>;
+}) {
+  const [moverDesde, setMoverDesde] = useState<number | null>(null);
+  const [moviendo, setMoviendo] = useState(false);
+
+  const { data: franjas = [], isLoading } = useQuery<FranjaEstado[]>({
+    queryKey: ["franjas", potreroId],
+    queryFn: () => getFranjas(potreroId),
+    staleTime: 10000,
+  });
+
+  const handleAccion = async (numero: number, accion: "activar" | "iniciar_descanso" | "resetear") => {
+    try {
+      await updateFranja(potreroId, numero, accion);
+      qc.invalidateQueries({ queryKey: ["franjas", potreroId] });
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleMover = async (haciaFranja: number) => {
+    if (moverDesde === null) return;
+    setMoviendo(true);
+    try {
+      await moverFranja(potreroId, { desde_franja: moverDesde, hacia_franja: haciaFranja });
+      qc.invalidateQueries({ queryKey: ["franjas", potreroId] });
+      setMoverDesde(null);
+    } catch {
+      /* ignore */
+    } finally {
+      setMoviendo(false);
+    }
+  };
+
+  if (isLoading) return <div className="mt-2 text-xs text-agro-muted">Cargando franjas...</div>;
+  if (!franjas.length) return (
+    <div className="mt-2 text-xs text-agro-muted bg-agro-bg rounded-md px-2.5 py-2">
+      Guardá el potrero para ver el estado de las franjas.
+    </div>
+  );
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {moverDesde !== null && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1.5 text-xs">
+          <span className="text-blue-700 font-medium">
+            Mover lote desde F{moverDesde} → seleccioná destino
+          </span>
+          <button onClick={() => setMoverDesde(null)} className="text-blue-400 hover:text-blue-600 ml-2">✕</button>
+        </div>
+      )}
+      {franjas.map((f) => {
+        const cfg = FRANJA_ESTADO_CONFIG[f.estado];
+        const objetivo = f.dias_descanso_objetivo ?? diasPorFranjaDefault ?? 21;
+        const esMoverDestino = moverDesde !== null && moverDesde !== f.numero;
+        return (
+          <div
+            key={f.numero}
+            className={`rounded-md border px-2.5 py-2 ${cfg.bg} ${esMoverDestino ? "border-blue-300 cursor-pointer hover:border-blue-500" : "border-agro-accent/20"}`}
+            onClick={esMoverDestino ? () => handleMover(f.numero) : undefined}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                <span className={`text-xs font-semibold ${cfg.text}`}>F{f.numero}</span>
+                <span className={`text-xs ${cfg.text}`}>{cfg.label}</span>
+                {f.estado !== "libre" && (
+                  <span className={`text-xs ${cfg.text} opacity-70`}>
+                    {f.estado === "en_uso"
+                      ? `(${f.dias_en_estado}d)`
+                      : `${f.dias_en_estado}/${objetivo}d`}
+                  </span>
+                )}
+              </div>
+              {moverDesde === null && (
+                <div className="flex items-center gap-1">
+                  {f.estado === "en_uso" && (
+                    <button
+                      onClick={() => setMoverDesde(f.numero)}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 hover:bg-emerald-300 transition-colors"
+                      title="Mover lote a otra franja"
+                    >
+                      Mover
+                    </button>
+                  )}
+                  {f.estado === "libre" && (
+                    <button
+                      onClick={() => handleAccion(f.numero, "activar")}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors"
+                    >
+                      Activar
+                    </button>
+                  )}
+                  {(f.estado === "lista" || f.estado === "descansando") && (
+                    <button
+                      onClick={() => handleAccion(f.numero, "resetear")}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
+                      title="Resetear franja"
+                    >
+                      ↺
+                    </button>
+                  )}
+                </div>
+              )}
+              {esMoverDestino && moviendo && <span className="text-xs text-blue-500">...</span>}
+            </div>
+            {/* Barra de progreso descanso */}
+            {(f.estado === "descansando" || f.estado === "lista") && (
+              <div className="mt-1.5 h-1.5 bg-white/60 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${f.estado === "lista" ? "bg-amber-400" : "bg-blue-400"}`}
+                  style={{ width: `${f.descanso_pct}%` }}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function PanelLateral() {
@@ -418,7 +556,7 @@ export function PanelLateral() {
                 <>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <div>
-                      <Label className="text-agro-muted text-xs">Total</Label>
+                      <Label className="text-agro-muted text-xs">Total de franjas</Label>
                       <Input
                         type="number"
                         {...register("cantidad_franjas", { valueAsNumber: true })}
@@ -428,40 +566,18 @@ export function PanelLateral() {
                       />
                     </div>
                     <div>
-                      <Label className="text-agro-muted text-xs">Usadas</Label>
+                      <Label className="text-agro-muted text-xs">Días por franja</Label>
                       <Input
                         type="number"
-                        {...register("franjas_usadas", { valueAsNumber: true })}
+                        {...register("dias_por_franja", { valueAsNumber: true })}
                         className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
-                        placeholder="0"
-                        min={0}
+                        placeholder="Ej: 21"
+                        min={1}
                       />
                     </div>
                   </div>
-                  <div className="mt-2">
-                    <Label className="text-agro-muted text-xs">Días estimados por franja</Label>
-                    <Input
-                      type="number"
-                      {...register("dias_por_franja", { valueAsNumber: true })}
-                      className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
-                      placeholder="Ej: 7"
-                      min={1}
-                    />
-                  </div>
-                  {diasPorFranja && potrero?.fecha_descanso && (() => {
-                    const restantes = diasPorFranja - diasDescanso(potrero.fecha_descanso!);
-                    return (
-                      <div className="mt-1.5 text-xs bg-agro-bg border border-agro-accent/20 rounded-md px-2.5 py-1.5">
-                        <span className="text-agro-muted">Franja activa: </span>
-                        <span className="text-agro-text font-medium">{franjasUsadas ?? "—"}</span>
-                        <span className="text-agro-muted"> — entra en descanso en </span>
-                        <span className={`font-medium ${restantes <= 2 ? "text-red-400" : "text-emerald-400"}`}>
-                          {restantes}
-                        </span>
-                        <span className="text-agro-muted"> días</span>
-                      </div>
-                    );
-                  })()}
+                  {/* Grid de estado de franjas */}
+                  {potrero && <FranjasGrid potreroId={potrero.id} diasPorFranjaDefault={diasPorFranja} qc={qc} />}
                 </>
               )}
             </div>

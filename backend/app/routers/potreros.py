@@ -11,10 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.categoria import TipoMovimiento
-from app.models.mapa import Animal, MovimientoGanado, Potrero
+from app.models.mapa import Animal, FranjaEstado, MovimientoGanado, Potrero
 from app.models.registro import Registro
 from app.models.user import User
-from app.schemas.mapa import AplicacionRead, MovimientoRead, PotreroCreate, PotreroRead, PotreroUpdate, RentabilidadPotrero
+from app.schemas.mapa import AplicacionRead, FranjaEstadoRead, FranjaMoverRequest, MovimientoRead, PotreroCreate, PotreroRead, PotreroUpdate, RentabilidadPotrero
 from app.services.rentabilidad import invalidar_cache_potrero
 
 router = APIRouter(prefix="/potreros", tags=["potreros"])
@@ -308,3 +308,156 @@ async def delete_potrero(
     potrero = await _get_own_potrero(potrero_id, current_user.id, db)
     await db.delete(potrero)
     await db.commit()
+
+
+# ── Franjas de rotación ───────────────────────────────────────────────────────
+
+def _franja_to_read(f: FranjaEstado, dias_objetivo: int | None) -> FranjaEstadoRead:
+    """Convierte FranjaEstado ORM → schema con campos calculados."""
+    hoy = date.today()
+    objetivo = f.dias_descanso_objetivo or dias_objetivo or 21
+
+    if f.en_uso:
+        estado = "en_uso"
+        dias = (hoy - f.fecha_entrada).days if f.fecha_entrada else 0
+        pct = 0
+    elif f.fecha_inicio_descanso:
+        dias = (hoy - f.fecha_inicio_descanso).days
+        pct = min(100, int(dias / objetivo * 100))
+        estado = "lista" if dias >= objetivo else "descansando"
+    else:
+        estado = "libre"
+        dias = 0
+        pct = 0
+
+    return FranjaEstadoRead(
+        id=f.id,
+        potrero_id=f.potrero_id,
+        numero=f.numero,
+        en_uso=f.en_uso,
+        fecha_entrada=f.fecha_entrada,
+        fecha_inicio_descanso=f.fecha_inicio_descanso,
+        dias_descanso_objetivo=f.dias_descanso_objetivo or dias_objetivo,
+        dias_en_estado=dias,
+        estado=estado,
+        descanso_pct=pct,
+    )
+
+
+async def _ensure_franjas(potrero: Potrero, db: AsyncSession) -> list[FranjaEstado]:
+    """Crea registros de franja si no existen para el total configurado."""
+    if not potrero.tiene_franjas or not potrero.cantidad_franjas:
+        return []
+    result = await db.execute(
+        select(FranjaEstado)
+        .where(FranjaEstado.potrero_id == potrero.id)
+        .order_by(FranjaEstado.numero)
+    )
+    existentes = list(result.scalars().all())
+    nums_existentes = {f.numero for f in existentes}
+
+    nuevas = []
+    for n in range(1, potrero.cantidad_franjas + 1):
+        if n not in nums_existentes:
+            nueva = FranjaEstado(
+                potrero_id=potrero.id,
+                numero=n,
+                en_uso=False,
+                dias_descanso_objetivo=potrero.dias_por_franja,
+            )
+            db.add(nueva)
+            nuevas.append(nueva)
+
+    if nuevas:
+        await db.flush()
+        existentes = existentes + nuevas
+        existentes.sort(key=lambda f: f.numero)
+
+    return existentes
+
+
+@router.get("/{potrero_id}/franjas", response_model=list[FranjaEstadoRead])
+async def get_franjas(
+    potrero_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    potrero = await _get_own_potrero(potrero_id, current_user.id, db)
+    franjas = await _ensure_franjas(potrero, db)
+    if franjas:
+        await db.commit()
+    return [_franja_to_read(f, potrero.dias_por_franja) for f in franjas]
+
+
+@router.post("/{potrero_id}/franjas/mover", response_model=list[FranjaEstadoRead])
+async def mover_franja(
+    potrero_id: int,
+    body: FranjaMoverRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mueve el lote de una franja a otra: la origen entra en descanso, la destino se activa."""
+    potrero = await _get_own_potrero(potrero_id, current_user.id, db)
+    franjas = await _ensure_franjas(potrero, db)
+
+    hoy = date.today()
+    franja_desde = next((f for f in franjas if f.numero == body.desde_franja), None)
+    franja_hacia = next((f for f in franjas if f.numero == body.hacia_franja), None)
+
+    if not franja_desde or not franja_hacia:
+        raise HTTPException(status_code=404, detail="Número de franja no encontrado")
+
+    # La franja origen entra en descanso
+    franja_desde.en_uso = False
+    franja_desde.fecha_inicio_descanso = hoy
+
+    # La franja destino se activa
+    franja_hacia.en_uso = True
+    franja_hacia.fecha_entrada = hoy
+    franja_hacia.fecha_inicio_descanso = None
+
+    await db.commit()
+    await db.refresh(franja_desde)
+    await db.refresh(franja_hacia)
+
+    return [_franja_to_read(f, potrero.dias_por_franja) for f in franjas]
+
+
+@router.put("/{potrero_id}/franjas/{numero}", response_model=FranjaEstadoRead)
+async def update_franja(
+    potrero_id: int,
+    numero: int,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Actualiza el estado de una franja individual (para activarla/desactivarla manualmente)."""
+    potrero = await _get_own_potrero(potrero_id, current_user.id, db)
+    result = await db.execute(
+        select(FranjaEstado).where(
+            FranjaEstado.potrero_id == potrero_id,
+            FranjaEstado.numero == numero,
+        )
+    )
+    franja = result.scalar_one_or_none()
+    if not franja:
+        raise HTTPException(status_code=404, detail="Franja no encontrada")
+
+    hoy = date.today()
+    accion = body.get("accion")  # "activar" | "iniciar_descanso" | "resetear"
+
+    if accion == "activar":
+        franja.en_uso = True
+        franja.fecha_entrada = hoy
+        franja.fecha_inicio_descanso = None
+    elif accion == "iniciar_descanso":
+        franja.en_uso = False
+        franja.fecha_inicio_descanso = hoy
+    elif accion == "resetear":
+        franja.en_uso = False
+        franja.fecha_entrada = None
+        franja.fecha_inicio_descanso = None
+
+    await db.commit()
+    await db.refresh(franja)
+    return _franja_to_read(franja, potrero.dias_por_franja)

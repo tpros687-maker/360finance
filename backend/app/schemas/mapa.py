@@ -184,6 +184,28 @@ class AplicacionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ── FranjaEstado ─────────────────────────────────────────────────────────────
+
+class FranjaEstadoRead(BaseModel):
+    id: int
+    potrero_id: int
+    numero: int
+    en_uso: bool
+    fecha_entrada: Optional[date]
+    fecha_inicio_descanso: Optional[date]
+    dias_descanso_objetivo: Optional[int]
+    dias_en_estado: int = 0
+    estado: str = "libre"          # "en_uso" | "descansando" | "lista" | "libre"
+    descanso_pct: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FranjaMoverRequest(BaseModel):
+    desde_franja: int
+    hacia_franja: int
+
+
 # ── Rentabilidad ──────────────────────────────────────────────────────────────
 
 class RentabilidadPotrero(BaseModel):

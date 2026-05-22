@@ -148,6 +148,28 @@ export interface PuntoInteresCreate {
   potrero_id?: number;
 }
 
+// ── FranjaEstado ──────────────────────────────────────────────────────────────
+
+export type EstadoFranja = "en_uso" | "descansando" | "lista" | "libre";
+
+export interface FranjaEstado {
+  id: number;
+  potrero_id: number;
+  numero: number;
+  en_uso: boolean;
+  fecha_entrada: string | null;
+  fecha_inicio_descanso: string | null;
+  dias_descanso_objetivo: number | null;
+  dias_en_estado: number;
+  estado: EstadoFranja;
+  descanso_pct: number;
+}
+
+export interface FranjaMoverRequest {
+  desde_franja: number;
+  hacia_franja: number;
+}
+
 // ── MovimientoGanado ──────────────────────────────────────────────────────────
 
 export interface MovimientoGanado {

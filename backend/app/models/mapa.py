@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -98,6 +99,31 @@ class Potrero(Base):
     aplicaciones: Mapped[list["AplicacionPotrero"]] = relationship(
         "AplicacionPotrero", back_populates="potrero", cascade="all, delete-orphan", lazy="select"
     )
+    franjas: Mapped[list["FranjaEstado"]] = relationship(
+        "FranjaEstado", back_populates="potrero", cascade="all, delete-orphan", lazy="select",
+        order_by="FranjaEstado.numero",
+    )
+
+
+class FranjaEstado(Base):
+    """Estado individual de cada franja de rotación dentro de un potrero."""
+    __tablename__ = "franjas_estado"
+    __table_args__ = (UniqueConstraint("potrero_id", "numero", name="uq_franja_potrero_numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    potrero_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("potreros.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2, 3...
+    en_uso: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    fecha_entrada: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    fecha_inicio_descanso: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    dias_descanso_objetivo: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    potrero: Mapped["Potrero"] = relationship("Potrero", back_populates="franjas")
 
 
 class Animal(Base):
