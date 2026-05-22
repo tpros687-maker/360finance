@@ -690,11 +690,6 @@ async def whatsapp_webhook(
     MediaContentType0: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    # ── DEBUG TOTAL: responder siempre con echo para diagnosticar ────────────────
-    logger.info("WEBHOOK DEBUG: From=%r Body=%r len=%d repr=%r", From, Body, len(Body), Body[:30])
-    return _twiml(f"ECHO: '{Body.strip()}' ({len(Body.strip())} chars)")
-    # ── FIN DEBUG ─────────────────────────────────────────────────────────────
-
     telefono = From.replace("whatsapp:", "").strip()
 
     result = await db.execute(select(User).where(User.telefono == telefono))
@@ -705,6 +700,14 @@ async def whatsapp_webhook(
             "No encontré una cuenta asociada a este número. "
             "Registrate en finance.360rural.com"
         )
+
+    # ── DEBUG: después del user lookup ───────────────────────────────────────
+    _msg_debug = (Body or "").strip()
+    _cmd_match = _msg_debug.lower() in _COMANDOS
+    return _twiml(
+        f"DEBUG user={user.id} body={repr(_msg_debug[:20])} cmd={_cmd_match}"
+    )
+    # ── FIN DEBUG ─────────────────────────────────────────────────────────────
 
     # Imagen adjunta — procesar como comprobante
     if MediaUrl0:
