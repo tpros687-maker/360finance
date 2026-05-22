@@ -45,6 +45,11 @@ export async function updateFranja(
   return res.data;
 }
 
+export async function getFranjasMapa(): Promise<FranjaEstado[]> {
+  const res = await api.get<FranjaEstado[]>("/potreros/franjas-mapa");
+  return res.data;
+}
+
 export async function getRentabilidadPotreros(params?: {
   fecha_desde?: string;
   fecha_hasta?: string;

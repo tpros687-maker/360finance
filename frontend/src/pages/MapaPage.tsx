@@ -10,7 +10,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 
 import { useMapaStore } from "@/store/mapaStore";
-import { getPotreros, createPotrero } from "@/lib/potrerosApi";
+import { getPotreros, createPotrero, getFranjasMapa } from "@/lib/potrerosApi";
 import { getPuntos, createPunto, deletePunto } from "@/lib/puntosApi";
 import { getMovimientos } from "@/lib/movimientosApi";
 import { PanelLateral } from "@/components/mapa/PanelLateral";
@@ -18,7 +18,7 @@ import { ModalMovimiento } from "@/components/mapa/ModalMovimiento";
 import { PuntosToolbar } from "@/components/mapa/PuntosToolbar";
 import { MovimientosPanel } from "@/components/mapa/MovimientosPanel";
 import { ElementosPanel } from "@/components/mapa/ElementosPanel";
-import type { Potrero, TipoPunto, GeoJSONPoint } from "@/types/mapa";
+import type { FranjaEstado, Potrero, TipoPunto, GeoJSONPoint } from "@/types/mapa";
 import { toast } from "@/hooks/useToast";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string;
@@ -34,6 +34,20 @@ const PUNTO_EMOJIS: Record<TipoPunto, string> = {
   casa: "🏠",
   sombra: "🌳",
   comedero: "🍽️",
+};
+
+const FRANJA_COLORS: Record<string, string> = {
+  en_uso:      "#22c55e", // green
+  descansando: "#3b82f6", // blue
+  lista:       "#f59e0b", // amber
+  libre:       "#94a3b8", // slate (faint)
+};
+
+const FRANJA_OPACITY: Record<string, number> = {
+  en_uso:      0.45,
+  descansando: 0.35,
+  lista:       0.45,
+  libre:       0.15,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -76,6 +90,61 @@ function buildPotreroFeatures(potreros: Potrero[]) {
   };
 }
 
+/** Divide potrero bbox into N vertical strips colored by franja state. */
+function buildFranjaStrips(potreros: Potrero[], franjasByPotrero: Map<number, FranjaEstado[]>) {
+  const features: GeoJSON.Feature[] = [];
+
+  for (const p of potreros) {
+    if (!p.tiene_franjas || !p.cantidad_franjas || p.cantidad_franjas < 2) continue;
+    const franjas = franjasByPotrero.get(p.id);
+    if (!franjas || franjas.length === 0) continue;
+
+    const ring = p.geometria.coordinates[0];
+    const lngs = ring.map((c) => c[0]);
+    const lats = ring.map((c) => c[1]);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const n = p.cantidad_franjas;
+    const step = (maxLng - minLng) / n;
+
+    franjas.forEach((f, i) => {
+      const x0 = minLng + i * step;
+      const x1 = minLng + (i + 1) * step;
+      // small inset so strips don't overlap potrero border
+      const pad = step * 0.04;
+      const latPad = (maxLat - minLat) * 0.04;
+      const stripCoords: number[][] = [
+        [x0 + pad, minLat + latPad],
+        [x1 - pad, minLat + latPad],
+        [x1 - pad, maxLat - latPad],
+        [x0 + pad, maxLat - latPad],
+        [x0 + pad, minLat + latPad],
+      ];
+      const centerLng = (x0 + x1) / 2;
+      const centerLat = (minLat + maxLat) / 2;
+
+      features.push({
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: [stripCoords] },
+        properties: {
+          franja_numero: f.numero,
+          estado: f.estado,
+          potrero_id: p.id,
+          label: `F${f.numero}`,
+          color: FRANJA_COLORS[f.estado] ?? "#94a3b8",
+          opacity: FRANJA_OPACITY[f.estado] ?? 0.2,
+          center_lng: centerLng,
+          center_lat: centerLat,
+        },
+      });
+    });
+  }
+
+  return { type: "FeatureCollection" as const, features };
+}
+
 export default function MapaPage() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -85,6 +154,7 @@ export default function MapaPage() {
   const tooltipRef = useRef<mapboxgl.Popup | null>(null);
   const mapReadyRef = useRef(false);
   const potrerosRef = useRef<Potrero[]>([]);
+  const franjasReadyRef = useRef(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnPoints, setDrawnPoints] = useState(0);
 
@@ -137,6 +207,12 @@ export default function MapaPage() {
       setMovimientos(data);
       return data;
     },
+  });
+
+  const { data: franjasMapaData } = useQuery({
+    queryKey: ["franjas-mapa"],
+    queryFn: getFranjasMapa,
+    refetchInterval: 30_000, // refresh every 30s
   });
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -261,6 +337,52 @@ export default function MapaPage() {
           "text-halo-width": 1.5,
         },
       });
+
+      // ── Franja strips (illustrative) ─────────────────────────────────────
+      map.addSource("franjas-strips", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+
+      map.addLayer({
+        id: "franjas-fill",
+        type: "fill",
+        source: "franjas-strips",
+        paint: {
+          "fill-color": ["get", "color"],
+          "fill-opacity": ["get", "opacity"],
+        },
+      });
+
+      map.addLayer({
+        id: "franjas-line",
+        type: "line",
+        source: "franjas-strips",
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 1,
+          "line-opacity": 0.7,
+        },
+      });
+
+      map.addLayer({
+        id: "franjas-label",
+        type: "symbol",
+        source: "franjas-strips",
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": 11,
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          "text-anchor": "center",
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "#000000",
+          "text-halo-width": 1.2,
+        },
+      });
+
+      franjasReadyRef.current = true;
 
       // Hover tooltip
       map.on("mouseenter", "potreros-fill", (e) => {
@@ -414,6 +536,27 @@ export default function MapaPage() {
     if (!source) return;
     source.setData(buildPotreroFeatures(potreros));
   }, [potreros]);
+
+  // ── Sync franja strips layer ───────────────────────────────────────────────
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current || !franjasReadyRef.current) return;
+    const source = map.getSource("franjas-strips") as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    // Group franjas by potrero_id
+    const byPotrero = new Map<number, FranjaEstado[]>();
+    for (const f of franjasMapaData ?? []) {
+      const arr = byPotrero.get(f.potrero_id) ?? [];
+      arr.push(f);
+      byPotrero.set(f.potrero_id, arr);
+    }
+    // Sort each group by numero
+    byPotrero.forEach((arr) => arr.sort((a, b) => a.numero - b.numero));
+
+    source.setData(buildFranjaStrips(potreros, byPotrero));
+  }, [franjasMapaData, potreros]);
 
   // ── Sync descanso HTML markers ─────────────────────────────────────────────
   // Emoji markers for potreros in descanso, positioned at polygon center.
