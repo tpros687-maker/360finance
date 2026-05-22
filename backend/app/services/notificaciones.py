@@ -161,6 +161,151 @@ async def _armar_resumen(user: User, db: AsyncSession) -> str:
     return "\n".join(lineas)
 
 
+async def _armar_resumen_semanal(user: User, db: AsyncSession) -> str:
+    """Resumen de los últimos 7 días para el bot WhatsApp."""
+    hoy = date.today()
+    hace_7 = hoy - timedelta(days=6)  # incluye hoy
+    moneda = user.moneda
+
+    # Gastos e ingresos de los últimos 7 días
+    gastos_q = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(Registro.monto), 0)).where(
+            Registro.user_id == user.id,
+            Registro.tipo == TipoMovimiento.gasto,
+            Registro.fecha >= hace_7,
+            Registro.fecha <= hoy,
+        )
+    )
+    ingresos_q = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(Registro.monto), 0)).where(
+            Registro.user_id == user.id,
+            Registro.tipo == TipoMovimiento.ingreso,
+            Registro.fecha >= hace_7,
+            Registro.fecha <= hoy,
+        )
+    )
+    total_gastos = float(gastos_q.scalar() or 0)
+    total_ingresos = float(ingresos_q.scalar() or 0)
+    balance = total_ingresos - total_gastos
+
+    # Movimientos recientes (hasta 5)
+    movimientos_q = await db.execute(
+        select(Registro)
+        .where(
+            Registro.user_id == user.id,
+            Registro.fecha >= hace_7,
+            Registro.fecha <= hoy,
+        )
+        .order_by(Registro.fecha.desc())
+        .limit(5)
+    )
+    movimientos = movimientos_q.scalars().all()
+
+    # Tareas completadas en los últimos 7 días
+    completadas_q = await db.execute(
+        select(TareaCuaderno).where(
+            TareaCuaderno.user_id == user.id,
+            TareaCuaderno.completada == True,  # noqa: E712
+            sqlfunc.date(TareaCuaderno.completed_at) >= hace_7,
+        ).order_by(TareaCuaderno.completed_at.desc()).limit(8)
+    )
+    completadas = completadas_q.scalars().all()
+
+    # Notas del período
+    notas_q = await db.execute(
+        select(sqlfunc.count(NotaCuaderno.id)).where(
+            NotaCuaderno.user_id == user.id,
+            sqlfunc.date(NotaCuaderno.created_at) >= hace_7,
+        )
+    )
+    n_notas = int(notas_q.scalar() or 0)
+
+    # Tareas pendientes próximas
+    en_7_dias = hoy + timedelta(days=7)
+    tareas_pend_q = await db.execute(
+        select(TareaCuaderno).where(
+            TareaCuaderno.user_id == user.id,
+            TareaCuaderno.completada == False,  # noqa: E712
+        ).order_by(
+            TareaCuaderno.fecha_planificada.asc().nulls_last(),
+            TareaCuaderno.created_at.desc()
+        ).limit(5)
+    )
+    tareas_pend = tareas_pend_q.scalars().all()
+
+    # Cobros vencidos
+    cobros_q = await db.execute(
+        select(
+            sqlfunc.coalesce(sqlfunc.sum(CuentaCobrar.monto), 0),
+            sqlfunc.count(CuentaCobrar.id),
+        ).where(
+            CuentaCobrar.user_id == user.id,
+            CuentaCobrar.pagado == False,  # noqa: E712
+            CuentaCobrar.fecha_vencimiento.isnot(None),
+            CuentaCobrar.fecha_vencimiento <= sqlfunc.current_date(),
+        )
+    )
+    cobros_row = cobros_q.one()
+    total_cobros = float(cobros_row[0] or 0)
+    n_cobros = int(cobros_row[1] or 0)
+
+    # Armar mensaje
+    bal_sign = "+" if balance >= 0 else ""
+    fecha_desde = hace_7.strftime("%d/%m")
+    fecha_hasta = hoy.strftime("%d/%m")
+
+    lineas = [
+        f"📊 *Resumen {fecha_desde}–{fecha_hasta} — 360 Agro*",
+        "",
+        f"💰 Ingresos: {moneda} ${total_ingresos:,.2f}",
+        f"💸 Gastos:   {moneda} ${total_gastos:,.2f}",
+        f"📈 Balance:  {moneda} {bal_sign}${balance:,.2f}",
+    ]
+
+    if movimientos:
+        lineas.append("")
+        lineas.append("📋 *Movimientos recientes:*")
+        for m in movimientos:
+            signo = "−" if m.tipo == TipoMovimiento.gasto else "+"
+            desc = (m.descripcion or "Sin descripción")[:30]
+            lineas.append(f"  {signo}${float(m.monto):,.0f} {desc} ({m.fecha.strftime('%d/%m')})")
+
+    if completadas:
+        lineas.append("")
+        lineas.append(f"✅ *Tareas completadas ({len(completadas)}):*")
+        for t in completadas:
+            fecha_c = t.completed_at.strftime("%d/%m") if t.completed_at else "?"
+            lineas.append(f"  ☑️ {t.texto} ({fecha_c})")
+
+    if tareas_pend:
+        lineas.append("")
+        lineas.append("📅 *Tareas pendientes:*")
+        for t in tareas_pend:
+            if t.fecha_planificada:
+                diff = (t.fecha_planificada - hoy).days
+                if diff < 0:
+                    etiq = f"⚠️ Vencida ({t.fecha_planificada.strftime('%d/%m')})"
+                elif diff == 0:
+                    etiq = "Hoy"
+                elif diff == 1:
+                    etiq = "Mañana"
+                else:
+                    etiq = t.fecha_planificada.strftime("%d/%m")
+            else:
+                etiq = "Sin fecha"
+            lineas.append(f"  - {etiq}: {t.texto}")
+
+    if n_cobros > 0:
+        lineas.append("")
+        lineas.append(f"⚠️ Cobros vencidos: {moneda} ${total_cobros:,.2f} ({n_cobros} cliente{'s' if n_cobros > 1 else ''})")
+
+    if n_notas > 0:
+        lineas.append("")
+        lineas.append(f"📓 Notas registradas esta semana: {n_notas}")
+
+    return "\n".join(lineas)
+
+
 async def enviar_resumen_diario(db: AsyncSession) -> None:
     """Envía el resumen diario a todos los usuarios con teléfono registrado."""
     if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN:

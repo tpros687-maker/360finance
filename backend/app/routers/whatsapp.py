@@ -19,7 +19,7 @@ from app.models.cliente import Cliente, CuentaCobrar, Proveedor, CuentaPagar
 from app.models.cuaderno import NotaCuaderno, TareaCuaderno
 from app.models.registro import Registro
 from app.models.user import User
-from app.services.notificaciones import _armar_resumen
+from app.services.notificaciones import _armar_resumen, _armar_resumen_semanal
 from groq import Groq
 
 logger = logging.getLogger(__name__)
@@ -311,7 +311,7 @@ _MENU_TEXTO = (
     "5️⃣  Registrar ingreso\n"
     "6️⃣  Ver tareas pendientes\n"
     "7️⃣  Balance del mes\n"
-    "8️⃣  Resumen del día\n\n"
+    "8️⃣  Resumen últimos 7 días\n\n"
     "Respondé con el número de la opción."
 )
 
@@ -842,7 +842,7 @@ async def whatsapp_webhook(
     if cmd == "7":
         return _twiml(await _cmd_balance(user, db))
     if cmd == "8":
-        return _twiml(await _armar_resumen(user, db))
+        return _twiml(await _armar_resumen_semanal(user, db))
 
     # Opciones del menú con estado (1-5)
     if cmd in _MENU_OPCIONES:
