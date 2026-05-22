@@ -75,6 +75,11 @@ function FranjasGrid({
     staleTime: 10000,
   });
 
+  // descanso = (total_franjas - 1) × dias_en_franja
+  const totalFranjas = franjas.length;
+  const diasEnFranja = diasPorFranjaDefault ?? 2;
+  const diasDescansoCalculado = Math.max(1, (totalFranjas - 1) * diasEnFranja);
+
   const handleAccion = async (numero: number, accion: "activar" | "iniciar_descanso" | "resetear") => {
     try {
       await updateFranja(potreroId, numero, accion);
@@ -117,24 +122,39 @@ function FranjasGrid({
       )}
       {franjas.map((f) => {
         const cfg = FRANJA_ESTADO_CONFIG[f.estado];
-        const objetivo = f.dias_descanso_objetivo ?? diasPorFranjaDefault ?? 21;
         const esMoverDestino = moverDesde !== null && moverDesde !== f.numero;
+        // "En uso": progreso de días pastoreando vs días_en_franja
+        const usoPct = f.estado === "en_uso" ? Math.min(100, Math.round(f.dias_en_estado / diasEnFranja * 100)) : 0;
+        const usoVencido = f.estado === "en_uso" && f.dias_en_estado >= diasEnFranja;
+        // "Descansando": progreso vs descanso calculado
+        const descPct = (f.estado === "descansando" || f.estado === "lista")
+          ? Math.min(100, Math.round(f.dias_en_estado / diasDescansoCalculado * 100))
+          : 0;
+
         return (
           <div
             key={f.numero}
-            className={`rounded-md border px-2.5 py-2 ${cfg.bg} ${esMoverDestino ? "border-blue-300 cursor-pointer hover:border-blue-500" : "border-agro-accent/20"}`}
+            className={`rounded-md border px-2.5 py-2 ${cfg.bg} ${
+              esMoverDestino ? "border-blue-300 cursor-pointer hover:border-blue-500" :
+              usoVencido ? "border-orange-300" : "border-agro-accent/20"
+            }`}
             onClick={esMoverDestino ? () => handleMover(f.numero) : undefined}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                <span className={`w-2 h-2 rounded-full shrink-0 ${usoVencido ? "bg-orange-500" : cfg.dot}`} />
                 <span className={`text-xs font-semibold ${cfg.text}`}>F{f.numero}</span>
-                <span className={`text-xs ${cfg.text}`}>{cfg.label}</span>
-                {f.estado !== "libre" && (
+                <span className={`text-xs ${cfg.text}`}>
+                  {usoVencido ? "⚠️ Mover" : cfg.label}
+                </span>
+                {f.estado === "en_uso" && (
+                  <span className={`text-xs opacity-70 ${usoVencido ? "text-orange-600" : cfg.text}`}>
+                    {f.dias_en_estado}/{diasEnFranja}d
+                  </span>
+                )}
+                {(f.estado === "descansando" || f.estado === "lista") && (
                   <span className={`text-xs ${cfg.text} opacity-70`}>
-                    {f.estado === "en_uso"
-                      ? `(${f.dias_en_estado}d)`
-                      : `${f.dias_en_estado}/${objetivo}d`}
+                    {f.dias_en_estado}/{diasDescansoCalculado}d
                   </span>
                 )}
               </div>
@@ -143,7 +163,11 @@ function FranjasGrid({
                   {f.estado === "en_uso" && (
                     <button
                       onClick={() => setMoverDesde(f.numero)}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800 hover:bg-emerald-300 transition-colors"
+                      className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                        usoVencido
+                          ? "bg-orange-200 text-orange-800 hover:bg-orange-300"
+                          : "bg-emerald-200 text-emerald-800 hover:bg-emerald-300"
+                      }`}
                       title="Mover lote a otra franja"
                     >
                       Mover
@@ -170,12 +194,22 @@ function FranjasGrid({
               )}
               {esMoverDestino && moviendo && <span className="text-xs text-blue-500">...</span>}
             </div>
-            {/* Barra de progreso descanso */}
+
+            {/* Barra de progreso: en uso */}
+            {f.estado === "en_uso" && (
+              <div className="mt-1.5 h-1.5 bg-white/60 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${usoVencido ? "bg-orange-400" : "bg-emerald-400"}`}
+                  style={{ width: `${usoPct}%` }}
+                />
+              </div>
+            )}
+            {/* Barra de progreso: descanso */}
             {(f.estado === "descansando" || f.estado === "lista") && (
               <div className="mt-1.5 h-1.5 bg-white/60 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${f.estado === "lista" ? "bg-amber-400" : "bg-blue-400"}`}
-                  style={{ width: `${f.descanso_pct}%` }}
+                  style={{ width: `${descPct}%` }}
                 />
               </div>
             )}
@@ -566,12 +600,12 @@ export function PanelLateral() {
                       />
                     </div>
                     <div>
-                      <Label className="text-agro-muted text-xs">Días por franja</Label>
+                      <Label className="text-agro-muted text-xs">Días en franja</Label>
                       <Input
                         type="number"
                         {...register("dias_por_franja", { valueAsNumber: true })}
                         className="mt-1 bg-agro-bg border-agro-accent/20 text-agro-text text-sm"
-                        placeholder="Ej: 21"
+                        placeholder="Ej: 2"
                         min={1}
                       />
                     </div>

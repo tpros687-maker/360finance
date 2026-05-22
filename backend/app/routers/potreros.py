@@ -312,19 +312,24 @@ async def delete_potrero(
 
 # ── Franjas de rotación ───────────────────────────────────────────────────────
 
-def _franja_to_read(f: FranjaEstado, dias_objetivo: int | None) -> FranjaEstadoRead:
-    """Convierte FranjaEstado ORM → schema con campos calculados."""
+def _franja_to_read(f: FranjaEstado, dias_en_franja: int | None, total_franjas: int) -> FranjaEstadoRead:
+    """
+    Convierte FranjaEstado ORM → schema con campos calculados.
+    dias_en_franja: días que el lote permanece en cada franja.
+    dias_descanso = (total_franjas - 1) * dias_en_franja
+    """
     hoy = date.today()
-    objetivo = f.dias_descanso_objetivo or dias_objetivo or 21
+    d_en_franja = dias_en_franja or 2
+    d_descanso = max(1, (total_franjas - 1) * d_en_franja)
 
     if f.en_uso:
         estado = "en_uso"
         dias = (hoy - f.fecha_entrada).days if f.fecha_entrada else 0
-        pct = 0
+        pct = min(100, int(dias / d_en_franja * 100))
     elif f.fecha_inicio_descanso:
         dias = (hoy - f.fecha_inicio_descanso).days
-        pct = min(100, int(dias / objetivo * 100))
-        estado = "lista" if dias >= objetivo else "descansando"
+        pct = min(100, int(dias / d_descanso * 100))
+        estado = "lista" if dias >= d_descanso else "descansando"
     else:
         estado = "libre"
         dias = 0
@@ -337,7 +342,7 @@ def _franja_to_read(f: FranjaEstado, dias_objetivo: int | None) -> FranjaEstadoR
         en_uso=f.en_uso,
         fecha_entrada=f.fecha_entrada,
         fecha_inicio_descanso=f.fecha_inicio_descanso,
-        dias_descanso_objetivo=f.dias_descanso_objetivo or dias_objetivo,
+        dias_descanso_objetivo=d_descanso,
         dias_en_estado=dias,
         estado=estado,
         descanso_pct=pct,
@@ -386,7 +391,7 @@ async def get_franjas(
     franjas = await _ensure_franjas(potrero, db)
     if franjas:
         await db.commit()
-    return [_franja_to_read(f, potrero.dias_por_franja) for f in franjas]
+    return [_franja_to_read(f, potrero.dias_por_franja, len(franjas)) for f in franjas]
 
 
 @router.post("/{potrero_id}/franjas/mover", response_model=list[FranjaEstadoRead])
@@ -420,7 +425,7 @@ async def mover_franja(
     await db.refresh(franja_desde)
     await db.refresh(franja_hacia)
 
-    return [_franja_to_read(f, potrero.dias_por_franja) for f in franjas]
+    return [_franja_to_read(f, potrero.dias_por_franja, len(franjas)) for f in franjas]
 
 
 @router.put("/{potrero_id}/franjas/{numero}", response_model=FranjaEstadoRead)
@@ -460,4 +465,5 @@ async def update_franja(
 
     await db.commit()
     await db.refresh(franja)
-    return _franja_to_read(franja, potrero.dias_por_franja)
+    total = potrero.cantidad_franjas or 1
+    return _franja_to_read(franja, potrero.dias_por_franja, total)
