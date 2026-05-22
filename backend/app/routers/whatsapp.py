@@ -556,6 +556,17 @@ def _parse_especie_cantidad(texto: str) -> tuple[int, str] | None:
     return (cantidad, especie)
 
 
+def _parse_multiples_especies(texto: str) -> list[tuple[int, str]]:
+    """'30 vaquillonas, 20 terneros' → [(30, 'bovino'), (20, 'bovino')]."""
+    partes = re.split(r'[,y]', texto)
+    resultados = []
+    for parte in partes:
+        parsed = _parse_especie_cantidad(parte.strip())
+        if parsed:
+            resultados.append(parsed)
+    return resultados
+
+
 def _parse_franjas(texto: str) -> tuple[int, int] | None:
     """'F1 a F2', '1 a 2', 'de 1 a 2' → (1, 2)."""
     lower = re.sub(r'f(\d+)', r'\1', texto.lower().strip())
@@ -566,22 +577,27 @@ def _parse_franjas(texto: str) -> tuple[int, int] | None:
 
 
 async def _buscar_potrero(db: AsyncSession, user_id: int, nombre: str) -> Potrero | None:
-    """Busca potrero por nombre exacto o parcial (preferencia por coincidencia más específica)."""
+    """Busca potrero por nombre exacto o por coincidencia de palabras completas."""
     result = await db.execute(select(Potrero).where(Potrero.user_id == user_id))
     potreros = list(result.scalars().all())
     lower = nombre.lower().strip()
+
+    def _word_boundary(pat: str, text: str) -> bool:
+        """True si `pat` aparece como token completo en `text` (no como substring de otra palabra)."""
+        return bool(re.search(r'(?<![a-z0-9áéíóúñ])' + re.escape(pat) + r'(?![a-z0-9áéíóúñ])', text))
+
     # 1. Coincidencia exacta
     for p in potreros:
         if p.nombre.lower() == lower:
             return p
-    # 2. El texto enviado contiene el nombre del potrero — ordenar por longitud desc
-    #    para preferir nombres más específicos (ej: "Nuevo Potrero 21" antes de "Nuevo Potrero")
+    # 2. El nombre completo del potrero aparece como palabras completas en el texto enviado
+    #    (ordenar desc por longitud para preferir el más específico)
     for p in sorted(potreros, key=lambda x: len(x.nombre), reverse=True):
-        if p.nombre.lower() in lower:
+        if _word_boundary(p.nombre.lower(), lower):
             return p
-    # 3. El nombre del potrero contiene el texto enviado
+    # 3. El texto enviado aparece como palabras completas en el nombre del potrero
     for p in sorted(potreros, key=lambda x: len(x.nombre), reverse=True):
-        if lower in p.nombre.lower():
+        if _word_boundary(lower, p.nombre.lower()):
             return p
     return None
 
@@ -659,11 +675,7 @@ async def _ejecutar_mover_potrero(
     )
     db.add(mov)
     await db.commit()
-    return (
-        f"✅ Movimiento registrado\n"
-        f"{cantidad} {especie} de *{potrero_origen.nombre}* → *{potrero_destino.nombre}*\n"
-        "Mandá *menu* para seguir."
-    )
+    return f"✅ {cantidad} {especie}: *{potrero_origen.nombre}* → *{potrero_destino.nombre}*"
 
 
 async def _handle_comando(cmd: str, user: User, db: AsyncSession) -> str | None:
@@ -1098,18 +1110,21 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
 
         if estado_actual == "esperando_especie_cantidad":
             data = _get_estado_data(telefono)
-            parsed = _parse_especie_cantidad(mensaje)
-            if not parsed:
+            lista_parsed = _parse_multiples_especies(mensaje)
+            if not lista_parsed:
                 _set_estado(telefono, "esperando_especie_cantidad", data)
-                return "No entendí. Escribí así: *50 novillos* o *30 ovejas*"
-            cantidad, especie = parsed
+                return "No entendí. Escribí así: *50 novillos* o *30 ovejas, 20 terneros*"
             potrero_origen = await _buscar_potrero(db, user.id, data.get("origen_nombre", ""))
             potrero_destino = await _buscar_potrero(db, user.id, data.get("destino_nombre", ""))
             if not potrero_origen or not potrero_destino:
                 _set_estado(telefono, "esperando_especie_cantidad", data)
                 return "Error al buscar los potreros. Intentá de nuevo."
-            respuesta = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie)
-            return respuesta
+            respuestas = []
+            for cantidad, especie in lista_parsed:
+                r = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie)
+                respuestas.append(r)
+            respuestas.append("Mandá *menu* para seguir.")
+            return "\n".join(respuestas)
 
         # Fallback — estado desconocido o no manejado
         if estado_actual not in (
