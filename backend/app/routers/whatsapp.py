@@ -716,6 +716,21 @@ async def whatsapp_webhook(
     if not mensaje:
         return _twiml("No recibí ningún mensaje. Intentá de nuevo.")
 
+    logger.info("Webhook recibido: telefono=%s mensaje='%s'", telefono, mensaje[:50])
+
+    # ── Comandos directos — PRIMERO, antes de cualquier otra lógica ───────────
+    cmd_directo = mensaje.lower().strip()
+    if cmd_directo in _COMANDOS:
+        logger.info("Comando directo detectado: '%s'", cmd_directo)
+        _clear_estado(telefono)
+        try:
+            respuesta = await _handle_comando(cmd_directo, user, db)
+            logger.info("Respuesta generada: %d chars", len(respuesta or ""))
+            return _twiml(respuesta or "OK")
+        except Exception as exc:
+            logger.exception("Error en comando directo '%s': %s", cmd_directo, exc)
+            return _twiml(f"Error: {type(exc).__name__}: {str(exc)[:100]}")
+
     # ── Manejo de estados del menú guiado ─────────────────────────────────────
     estado_actual = _get_estado(telefono)
 
@@ -835,16 +850,6 @@ async def whatsapp_webhook(
         _set_estado(telefono, nuevo_estado)
         return _twiml(pregunta)
 
-    if cmd in _COMANDOS:
-        _clear_estado(telefono)
-        try:
-            logger.info("Ejecutando comando '%s' para usuario %d", cmd, user.id)
-            respuesta = await _handle_comando(cmd, user, db)
-            logger.info("Respuesta comando '%s': %s chars", cmd, len(respuesta) if respuesta else 0)
-            return _twiml(respuesta or "Comando procesado.")
-        except Exception as exc:
-            logger.exception("Error en comando '%s': %s", cmd, exc)
-            return _twiml(f"Error al procesar '{cmd}': {type(exc).__name__}: {str(exc)[:80]}")
 
     # Detección rápida sin Groq (prefijos explícitos, preguntas, palabras interrogativas)
     tipo_rapido = _detectar_tipo_rapido(mensaje)
