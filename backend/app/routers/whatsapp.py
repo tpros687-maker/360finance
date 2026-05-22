@@ -558,15 +558,22 @@ def _parse_franjas(texto: str) -> tuple[int, int] | None:
 
 
 async def _buscar_potrero(db: AsyncSession, user_id: int, nombre: str) -> Potrero | None:
-    """Busca potrero por nombre exacto o parcial."""
+    """Busca potrero por nombre exacto o parcial (preferencia por coincidencia más específica)."""
     result = await db.execute(select(Potrero).where(Potrero.user_id == user_id))
     potreros = list(result.scalars().all())
     lower = nombre.lower().strip()
+    # 1. Coincidencia exacta
     for p in potreros:
         if p.nombre.lower() == lower:
             return p
-    for p in potreros:
-        if lower in p.nombre.lower() or p.nombre.lower() in lower:
+    # 2. El texto enviado contiene el nombre del potrero — ordenar por longitud desc
+    #    para preferir nombres más específicos (ej: "Nuevo Potrero 21" antes de "Nuevo Potrero")
+    for p in sorted(potreros, key=lambda x: len(x.nombre), reverse=True):
+        if p.nombre.lower() in lower:
+            return p
+    # 3. El nombre del potrero contiene el texto enviado
+    for p in sorted(potreros, key=lambda x: len(x.nombre), reverse=True):
+        if lower in p.nombre.lower():
             return p
     return None
 
@@ -980,8 +987,11 @@ async def whatsapp_webhook(
             desde, hasta = franjas
             potrero = await _buscar_potrero(db, user.id, data.get("potrero_nombre", ""))
             if not potrero:
-                return _twiml("Error al buscar el potrero. Empezá de nuevo con *mover*.")
+                _set_estado(telefono, "esperando_desde_hasta_franja", data)
+                return _twiml("Error al buscar el potrero. Intentá de nuevo.")
             respuesta = await _ejecutar_mover_franjas(db, potrero, desde, hasta)
+            if not respuesta.startswith("✅"):
+                _set_estado(telefono, "esperando_desde_hasta_franja", data)
             return _twiml(respuesta)
 
         if estado_actual == "esperando_potrero_origen":
@@ -1024,7 +1034,8 @@ async def whatsapp_webhook(
             potrero_origen = await _buscar_potrero(db, user.id, data.get("origen_nombre", ""))
             potrero_destino = await _buscar_potrero(db, user.id, data.get("destino_nombre", ""))
             if not potrero_origen or not potrero_destino:
-                return _twiml("Error al buscar los potreros. Empezá de nuevo con *mover*.")
+                _set_estado(telefono, "esperando_especie_cantidad", data)
+                return _twiml("Error al buscar los potreros. Intentá de nuevo.")
             respuesta = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie)
             return _twiml(respuesta)
 
