@@ -836,15 +836,17 @@ async def whatsapp_webhook(
     # ── Comandos rápidos — detección por palabra exacta, sin Groq ─────────────
     cmd = mensaje.lower().strip()
 
-    # Opción del menú (número solo)
+    # Opciones del menú directas (sin estado)
+    if cmd == "6":
+        return _twiml(await _cmd_tareas(user, db))
+    if cmd == "7":
+        return _twiml(await _cmd_balance(user, db))
+    if cmd == "8":
+        return _twiml(await _armar_resumen(user, db))
+
+    # Opciones del menú con estado (1-5)
     if cmd in _MENU_OPCIONES:
         nuevo_estado, pregunta = _MENU_OPCIONES[cmd]
-        if cmd in ("6",):
-            return _twiml(await _cmd_tareas(user, db))
-        if cmd in ("7",):
-            return _twiml(await _cmd_balance(user, db))
-        if cmd in ("8",):
-            return _twiml(await _armar_resumen(user, db))
         _set_estado(telefono, nuevo_estado)
         return _twiml(pregunta)
 
