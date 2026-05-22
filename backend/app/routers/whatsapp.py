@@ -874,6 +874,17 @@ async def whatsapp_webhook(
 
     logger.info("Webhook recibido: telefono=%s mensaje='%s'", telefono, mensaje[:50])
 
+    try:
+        return await _procesar_mensaje(mensaje, telefono, user, db)
+    except Exception as exc:
+        logger.exception("Error no capturado en webhook WhatsApp: %s", exc)
+        _clear_estado(telefono)
+        return _twiml("Ocurrió un error inesperado. Estado reiniciado. Mandá *menu* para continuar.")
+
+
+async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSession) -> Response:
+    """Lógica principal del webhook — siempre envuelta en try/except en el caller."""
+
     # ── Comandos directos — PRIMERO, antes de cualquier otra lógica ───────────
     cmd_directo = mensaje.lower().strip()
     if cmd_directo in _COMANDOS:
@@ -888,10 +899,11 @@ async def whatsapp_webhook(
     # ── Manejo de estados del menú guiado ─────────────────────────────────────
     estado_actual = _get_estado(telefono)
 
+    _ESCAPE_CMDS = {"menu", "menú", "salir", "cancelar", "cancel", "reset", "mover", "0"}
+
     if estado_actual:
-        # Si el usuario manda "menu", "salir" o "cancelar" estando en un estado → resetear
         cmd_escape = mensaje.lower().strip()
-        if cmd_escape in ("menu", "menú", "salir", "cancelar", "cancel"):
+        if cmd_escape in _ESCAPE_CMDS and cmd_escape not in ("mover",):
             _clear_estado(telefono)
             return _twiml(_MENU_TEXTO)
 
@@ -1038,6 +1050,15 @@ async def whatsapp_webhook(
                 return _twiml("Error al buscar los potreros. Intentá de nuevo.")
             respuesta = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie)
             return _twiml(respuesta)
+
+        # Fallback — estado desconocido o no manejado
+        if estado_actual not in (
+            "esperando_nota", "esperando_tarea", "esperando_realizada",
+            "esperando_gasto", "esperando_ingreso",
+            "esperando_tipo_mov", "esperando_potrero_franja", "esperando_desde_hasta_franja",
+            "esperando_potrero_origen", "esperando_potrero_destino", "esperando_especie_cantidad",
+        ):
+            return _twiml(f"Estado inesperado '{estado_actual}' reiniciado. Mandá *menu* para continuar.")
 
         if estado_actual in ("esperando_gasto", "esperando_ingreso"):
             tipo_forzado = "gasto" if estado_actual == "esperando_gasto" else "ingreso"
@@ -1266,6 +1287,28 @@ async def whatsapp_webhook(
             return _twiml(
                 f"No encontré un pago pendiente con '{contraparte}'. "
                 "Verificá el nombre o registralo primero."
+            )
+        monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
+        return _twiml(f"✅ Pago a {contraparte} por {monto_fmt} marcado como realizado.")
+
+    if tipo == "marcar_cobrado":
+        if not contraparte:
+            return _twiml("No pude identificar el cliente. Intentá: 'Me pagó Juan Pérez'.")
+        cuenta = await _marcar_cuenta_cobrada(db, user.id, contraparte, monto_raw)
+        if cuenta is None:
+            return _twiml(
+                f"No encontré un cobro pendiente con '{contraparte}'. "
+                "Verificá el nombre o registralo primero."
+            )
+        monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
+        return _twiml(f"✅ Cobro de {contraparte} por {monto_fmt} marcado como recibido.")
+
+    try:
+        respuesta = await _responder_consulta(mensaje, user, db)
+    except Exception as exc:
+        logger.exception("Error respondiendo consulta WhatsApp: %s", exc)
+        respuesta = "No pude procesar tu consulta. Intentá desde la app."
+    return _twiml(respuesta)
             )
         monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
         return _twiml(f"✅ Pago a {contraparte} por {monto_fmt} marcado como realizado.")
