@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Paperclip, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Paperclip, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { deleteRegistro } from "@/lib/registrosApi";
@@ -30,11 +30,65 @@ function formatFecha(fecha: string) {
   });
 }
 
+const MESES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+function getMesKey(fecha: string) {
+  // fecha es "YYYY-MM-DD"
+  return fecha.substring(0, 7); // "YYYY-MM"
+}
+
+function getMesLabel(key: string) {
+  const [year, month] = key.split("-");
+  return `${MESES[parseInt(month) - 1]} ${year}`;
+}
+
+function getMesActual() {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+}
+
+interface GrupoMes {
+  key: string;
+  label: string;
+  items: import("@/types/registros").Registro[];
+  totalIngresos: number;
+  totalGastos: number;
+}
+
 export function RegistrosTable({ data, isLoading, onEdit }: Props) {
   const queryClient = useQueryClient();
   const { setFilters } = useRegistrosStore();
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const mesActual = getMesActual();
+  const [gruposAbiertos, setGruposAbiertos] = useState<Record<string, boolean>>({});
+
+  function toggleGrupo(key: string) {
+    setGruposAbiertos((prev) => ({ ...prev, [key]: !isGrupoAbierto(key) }));
+  }
+
+  function isGrupoAbierto(key: string): boolean {
+    if (key in gruposAbiertos) return gruposAbiertos[key];
+    return key === mesActual; // mes actual abierto por defecto
+  }
+
+  // Agrupar items por mes
+  const grupos: GrupoMes[] = [];
+  const grupoMap: Record<string, GrupoMes> = {};
+  for (const item of data.items) {
+    const key = getMesKey(item.fecha);
+    if (!grupoMap[key]) {
+      const g: GrupoMes = { key, label: getMesLabel(key), items: [], totalIngresos: 0, totalGastos: 0 };
+      grupoMap[key] = g;
+      grupos.push(g);
+    }
+    grupoMap[key].items.push(item);
+    if (item.tipo === "ingreso") grupoMap[key].totalIngresos += parseFloat(item.monto);
+    else grupoMap[key].totalGastos += parseFloat(item.monto);
+  }
 
   const deleteMutation = useMutation({
     mutationFn: deleteRegistro,
@@ -103,84 +157,118 @@ export function RegistrosTable({ data, isLoading, onEdit }: Props) {
                   </td>
                 </tr>
               ) : (
-                data.items.map((registro) => (
-                  <tr
-                    key={registro.id}
-                    className="border-b border-slate-700/40 hover:bg-slate-800/40 transition-colors group"
-                  >
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                      {formatFecha(registro.fecha)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={registro.tipo}>
-                        {registro.tipo === "gasto" ? "Gasto" : "Ingreso"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: registro.categoria.color }}
-                        />
-                        <span className="text-gray-700 truncate max-w-[140px]">
-                          {registro.categoria.nombre}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                      {registro.potrero ? (
-                        <span className="text-gray-700 text-xs bg-slate-700/60 rounded px-1.5 py-0.5">
-                          {registro.potrero.nombre}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 max-w-xs">
-                      <span className="truncate block">{registro.descripcion || "—"}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-medium whitespace-nowrap">
-                      <span
-                        className={registro.tipo === "gasto" ? "text-red-400" : "text-emerald-400"}
+                grupos.map((grupo) => {
+                  const abierto = isGrupoAbierto(grupo.key);
+                  const balGrupo = grupo.totalIngresos - grupo.totalGastos;
+                  return (
+                    <>
+                      {/* Cabecera del mes */}
+                      <tr
+                        key={`header-${grupo.key}`}
+                        className="cursor-pointer select-none bg-slate-800/70 hover:bg-slate-800 transition-colors border-b border-slate-600"
+                        onClick={() => toggleGrupo(grupo.key)}
                       >
-                        {registro.tipo === "gasto" ? "−" : "+"}
-                        {formatMonto(registro.monto)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
-                        {registro.comprobante_url && (
-                          <button
-                            onClick={() => handleComprobanteClick(registro.comprobante_url!)}
-                            className="p-1.5 rounded-md text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 transition-colors"
-                            title="Ver comprobante"
-                          >
-                            <Paperclip className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => onEdit(registro)}
-                          className="p-1.5 rounded-md text-slate-500 hover:text-agro-primary hover:bg-agro-primary/10 transition-colors"
-                          title="Editar"
+                        <td colSpan={4} className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            {abierto
+                              ? <ChevronUp className="h-4 w-4 text-slate-400" />
+                              : <ChevronDown className="h-4 w-4 text-slate-400" />
+                            }
+                            <span className="text-sm font-semibold text-slate-200">{grupo.label}</span>
+                            <span className="text-xs text-slate-500">{grupo.items.length} registros</span>
+                          </div>
+                        </td>
+                        <td colSpan={2} className="px-4 py-2.5 text-right">
+                          <div className="flex items-center justify-end gap-4 text-xs font-mono">
+                            <span className="text-red-400">− {formatMonto(String(grupo.totalGastos))}</span>
+                            <span className="text-emerald-400">+ {formatMonto(String(grupo.totalIngresos))}</span>
+                            <span className={`font-bold ${balGrupo >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                              {balGrupo >= 0 ? "+" : ""}{formatMonto(String(balGrupo))}
+                            </span>
+                          </div>
+                        </td>
+                        <td />
+                      </tr>
+
+                      {/* Filas del mes (colapsables) */}
+                      {abierto && grupo.items.map((registro) => (
+                        <tr
+                          key={registro.id}
+                          className="border-b border-slate-700/40 hover:bg-slate-800/40 transition-colors group"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(registro)}
-                          disabled={deletingId === registro.id}
-                          className="p-1.5 rounded-md text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                          title="Eliminar"
-                        >
-                          {deletingId === registro.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          <td className="px-4 py-3 text-gray-700 whitespace-nowrap pl-10">
+                            {formatFecha(registro.fecha)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant={registro.tipo}>
+                              {registro.tipo === "gasto" ? "Gasto" : "Ingreso"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: registro.categoria.color }}
+                              />
+                              <span className="text-gray-700 truncate max-w-[140px]">
+                                {registro.categoria.nombre}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                            {registro.potrero ? (
+                              <span className="text-gray-700 text-xs bg-slate-700/60 rounded px-1.5 py-0.5">
+                                {registro.potrero.nombre}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 max-w-xs">
+                            <span className="truncate block">{registro.descripcion || "—"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-medium whitespace-nowrap">
+                            <span className={registro.tipo === "gasto" ? "text-red-400" : "text-emerald-400"}>
+                              {registro.tipo === "gasto" ? "−" : "+"}
+                              {formatMonto(registro.monto)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-1">
+                              {registro.comprobante_url && (
+                                <button
+                                  onClick={() => handleComprobanteClick(registro.comprobante_url!)}
+                                  className="p-1.5 rounded-md text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 transition-colors"
+                                  title="Ver comprobante"
+                                >
+                                  <Paperclip className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => onEdit(registro)}
+                                className="p-1.5 rounded-md text-slate-500 hover:text-agro-primary hover:bg-agro-primary/10 transition-colors"
+                                title="Editar"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(registro)}
+                                disabled={deletingId === registro.id}
+                                className="p-1.5 rounded-md text-red-400 hover:text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                title="Eliminar"
+                              >
+                                {deletingId === registro.id
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Trash2 className="h-3.5 w-3.5" />
+                                }
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  );
+                })
               )}
             </tbody>
 

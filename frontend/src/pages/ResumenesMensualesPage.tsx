@@ -31,11 +31,28 @@ interface ResumenMensual {
   monto_top_ingreso: number | null;
 }
 
+interface RegistroItem {
+  id: number;
+  fecha: string;
+  tipo: "gasto" | "ingreso";
+  monto: string;
+  descripcion: string | null;
+  categoria: { nombre: string; color: string };
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 async function getResumenes(): Promise<ResumenMensual[]> {
   const res = await api.get<ResumenMensual[]>("/resumenes");
   return res.data;
+}
+
+async function getRegistrosMes(year: number, month: number): Promise<RegistroItem[]> {
+  const desde = `${year}-${String(month).padStart(2, "0")}-01`;
+  const ultimoDia = new Date(year, month, 0).getDate();
+  const hasta = `${year}-${String(month).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`;
+  const res = await api.get("/registros", { params: { fecha_desde: desde, fecha_hasta: hasta, limit: 200 } });
+  return res.data.items ?? [];
 }
 
 async function generarResumen(year?: number, month?: number): Promise<ResumenMensual> {
@@ -127,6 +144,43 @@ function ResumenCard({
 }
 
 // ── Panel de detalle ──────────────────────────────────────────────────────────
+
+function MovimientosMes({ year, month }: { year: number; month: number }) {
+  const { data: registros = [], isLoading } = useQuery({
+    queryKey: ["registros-mes", year, month],
+    queryFn: () => getRegistrosMes(year, month),
+  });
+
+  if (isLoading) return (
+    <div className="flex justify-center py-4">
+      <Loader2 className="h-4 w-4 animate-spin text-agro-muted" />
+    </div>
+  );
+
+  if (registros.length === 0) return (
+    <p className="text-xs text-agro-muted text-center py-3">Sin movimientos registrados en este mes.</p>
+  );
+
+  return (
+    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+      {registros.map((r) => (
+        <div key={r.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-agro-accent/10 last:border-0">
+          <span
+            className="h-2 w-2 rounded-full shrink-0"
+            style={{ backgroundColor: r.categoria.color }}
+          />
+          <span className="text-agro-muted w-16 shrink-0">
+            {new Date(r.fecha + "T00:00:00").toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit" })}
+          </span>
+          <span className="flex-1 truncate text-agro-text">{r.descripcion || r.categoria.nombre}</span>
+          <span className={`font-mono font-semibold shrink-0 ${r.tipo === "gasto" ? "text-red-500" : "text-emerald-600"}`}>
+            {r.tipo === "gasto" ? "−" : "+"}${new Intl.NumberFormat("es-UY").format(parseFloat(r.monto))}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function ResumenDetalle({ r, prev }: { r: ResumenMensual; prev?: ResumenMensual }) {
   const balancePos = r.balance >= 0;
@@ -228,6 +282,12 @@ function ResumenDetalle({ r, prev }: { r: ResumenMensual; prev?: ResumenMensual 
             <p className="text-agro-muted">Completadas</p>
           </div>
         </div>
+      </div>
+
+      {/* Movimientos del mes */}
+      <div className="rounded-xl border border-agro-accent/20 bg-white p-3">
+        <p className="text-xs font-semibold text-agro-text mb-2">Movimientos del mes</p>
+        <MovimientosMes year={r.year} month={r.month} />
       </div>
     </div>
   );
