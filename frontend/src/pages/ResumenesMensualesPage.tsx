@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, TrendingDown, BarChart3, Calendar, RefreshCw,
@@ -242,10 +242,11 @@ export default function ResumenesMensualesPage() {
   const { data: resumenes = [], isLoading } = useQuery({
     queryKey: ["resumenes"],
     queryFn: getResumenes,
-    onSuccess: (data) => {
-      if (data.length > 0 && selected === null) setSelected(data[0].id);
-    },
   });
+
+  useEffect(() => {
+    if (resumenes.length > 0 && selected === null) setSelected(resumenes[0].id);
+  }, [resumenes]);
 
   const generar = useMutation({
     mutationFn: () => generarResumen(),
