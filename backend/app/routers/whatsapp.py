@@ -1,15 +1,13 @@
-"""Webhook de WhatsApp via Twilio — recibe mensajes y los procesa con IA."""
+"""Webhook de WhatsApp via Meta Cloud API — recibe mensajes y los procesa con IA."""
 import base64
 import json
 import logging
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Optional
-
 import httpx
-from fastapi import APIRouter, Depends, Form
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import func as sqlfunc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,14 +27,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
 
 
-def _twiml(mensaje: str) -> Response:
-    # Escapar caracteres especiales XML para no romper el TwiML
-    safe = mensaje.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>{safe}</Message>
-</Response>"""
-    return Response(content=xml, media_type="application/xml")
+async def _send_meta_message(to: str, text: str) -> None:
+    """Envía un mensaje de texto via Meta Cloud API (WhatsApp Business)."""
+    url = f"https://graph.facebook.com/v19.0/{settings.META_PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.META_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": text},
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            logger.error("Meta API error %s: %s", resp.status_code, resp.text)
+        resp.raise_for_status()
 
 
 def _groq_client() -> Groq:
@@ -196,17 +204,17 @@ async def _procesar_imagen_comprobante(
     user: User,
     db: AsyncSession,
 ) -> str:
-    # Descargar imagen — Twilio sandbox requiere autenticación básica
+    # Descargar imagen — Meta media URL requiere Authorization header
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
                 media_url,
-                auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
+                headers={"Authorization": f"Bearer {settings.META_ACCESS_TOKEN}"},
             )
             resp.raise_for_status()
             image_bytes = resp.content
     except Exception as exc:
-        logger.exception("Error descargando imagen de Twilio: %s", exc)
+        logger.exception("Error descargando imagen de Meta: %s", exc)
         return f"No pude descargar la imagen ({type(exc).__name__}: {exc}). Intentá de nuevo."
 
     if not image_bytes:
@@ -838,55 +846,104 @@ async def _responder_consulta(mensaje: str, user: User, db: AsyncSession) -> str
 
 # ── Webhook ───────────────────────────────────────────────────────────────────
 
-@router.post("/webhook")
-async def whatsapp_webhook(
-    From: str = Form(...),
-    Body: str = Form(""),
-    MediaUrl0: Optional[str] = Form(None),
-    MediaContentType0: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db),
-):
-    telefono = From.replace("whatsapp:", "").strip()
+@router.get("/webhook")
+async def whatsapp_webhook_verify(request: Request):
+    """Verificación del webhook de Meta (challenge handshake)."""
+    params = request.query_params
+    mode = params.get("hub.mode")
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge")
+    if mode == "subscribe" and token == settings.META_VERIFY_TOKEN:
+        logger.info("Meta webhook verificado OK")
+        return JSONResponse(content=int(challenge), status_code=200)
+    logger.warning("Meta webhook verify failed: mode=%s token=%s", mode, token)
+    return JSONResponse(content={"error": "Forbidden"}, status_code=403)
 
-    result = await db.execute(select(User).where(User.telefono == telefono))
+
+@router.post("/webhook")
+async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    """Recibe mensajes de WhatsApp via Meta Cloud API."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(content={"status": "ok"})
+
+    # Extraer el primer mensaje del payload
+    try:
+        entry = body.get("entry", [{}])[0]
+        change = entry.get("changes", [{}])[0]
+        value = change.get("value", {})
+        messages = value.get("messages", [])
+        if not messages:
+            return JSONResponse(content={"status": "ok"})
+        msg = messages[0]
+        telefono = msg.get("from", "")
+        msg_type = msg.get("type", "text")
+    except Exception as exc:
+        logger.exception("Error parseando payload Meta: %s", exc)
+        return JSONResponse(content={"status": "ok"})
+
+    if not telefono:
+        return JSONResponse(content={"status": "ok"})
+
+    # Buscar usuario — Meta envía número sin +, nuestra DB puede tener con o sin +
+    result = await db.execute(select(User).where(User.telefono == "+" + telefono.lstrip("+")))
     user = result.scalar_one_or_none()
+    if user is None:
+        result2 = await db.execute(select(User).where(User.telefono == telefono))
+        user = result2.scalar_one_or_none()
 
     if user is None:
-        return _twiml(
+        await _send_meta_message(
+            telefono,
             "No encontré una cuenta asociada a este número. "
-            "Registrate en finance.360rural.com"
+            "Registrate en finance.360rural.com",
         )
+        return JSONResponse(content={"status": "ok"})
 
-    # Imagen adjunta — procesar como comprobante
-    if MediaUrl0:
+    # Imagen adjunta
+    if msg_type == "image":
         try:
-            respuesta = await _procesar_imagen_comprobante(
-                MediaUrl0, MediaContentType0 or "image/jpeg", user, db
-            )
+            media_id = msg.get("image", {}).get("id", "")
+            mime = msg.get("image", {}).get("mime_type", "image/jpeg")
+            async with httpx.AsyncClient(timeout=30) as client:
+                meta_resp = await client.get(
+                    f"https://graph.facebook.com/v19.0/{media_id}",
+                    headers={"Authorization": f"Bearer {settings.META_ACCESS_TOKEN}"},
+                )
+                meta_resp.raise_for_status()
+                media_url = meta_resp.json().get("url", "")
+            respuesta = await _procesar_imagen_comprobante(media_url, mime, user, db)
         except Exception as exc:
-            logger.exception("Error procesando imagen WhatsApp: %s", exc)
+            logger.exception("Error procesando imagen Meta: %s", exc)
             respuesta = "Hubo un error procesando la imagen. Intentá de nuevo."
-        return _twiml(respuesta)
+        await _send_meta_message(telefono, respuesta)
+        return JSONResponse(content={"status": "ok"})
 
-    mensaje = Body.strip()
+    # Texto
+    mensaje = ""
+    if msg_type == "text":
+        mensaje = msg.get("text", {}).get("body", "").strip()
     if not mensaje:
-        return _twiml("No recibí ningún mensaje. Intentá de nuevo.")
+        return JSONResponse(content={"status": "ok"})
 
-    print(f"[WA] tel={telefono} msg={mensaje[:40]!r} user={user.id if user else None}", flush=True)
-    logger.warning("Webhook recibido: telefono=%s mensaje='%s'", telefono, mensaje[:50])
+    logger.info("Webhook Meta: telefono=%s mensaje='%s'", telefono, mensaje[:50])
 
     try:
-        resp = await _procesar_mensaje(mensaje, telefono, user, db)
-        print(f"[WA] respuesta len={len(resp.body) if hasattr(resp,'body') else '?'}", flush=True)
-        return resp
+        respuesta = await _procesar_mensaje(mensaje, telefono, user, db)
+        await _send_meta_message(telefono, respuesta)
     except Exception as exc:
         logger.exception("Error no capturado en webhook WhatsApp: %s", exc)
         _clear_estado(telefono)
-        return _twiml("Ocurrió un error inesperado. Estado reiniciado. Mandá *menu* para continuar.")
+        await _send_meta_message(
+            telefono,
+            "Ocurrió un error inesperado. Estado reiniciado. Mandá *menu* para continuar.",
+        )
+    return JSONResponse(content={"status": "ok"})
 
 
-async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSession) -> Response:
-    """Lógica principal del webhook — siempre envuelta en try/except en el caller."""
+async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSession) -> str:
+    """Lógica principal del webhook — devuelve el texto a enviar al usuario."""
 
     # ── Comandos directos — PRIMERO, antes de cualquier otra lógica ───────────
     cmd_directo = mensaje.lower().strip()
@@ -894,10 +951,10 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         try:
             respuesta_cmd = await _handle_comando(cmd_directo, user, db)
             if respuesta_cmd is not None:
-                return _twiml(respuesta_cmd)
+                return respuesta_cmd
         except Exception as exc:
             logger.exception("Error en _handle_comando '%s': %s", cmd_directo, exc)
-            return _twiml(f"Hubo un error procesando '{cmd_directo}'. Intentá de nuevo.")
+            return f"Hubo un error procesando '{cmd_directo}'. Intentá de nuevo."
 
     # ── Manejo de estados del menú guiado ─────────────────────────────────────
     estado_actual = _get_estado(telefono)
@@ -908,7 +965,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         cmd_escape = mensaje.lower().strip()
         if cmd_escape in _ESCAPE_CMDS and cmd_escape not in ("mover",):
             _clear_estado(telefono)
-            return _twiml(_MENU_TEXTO)
+            return _MENU_TEXTO
 
         _clear_estado(telefono)  # consumir estado
 
@@ -918,8 +975,8 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
                 db.add(NotaCuaderno(user_id=user.id, texto=linea))
             await db.commit()
             if len(lineas) == 1:
-                return _twiml("✅ Nota guardada. Mandá *menu* para seguir.")
-            return _twiml(f"✅ {len(lineas)} notas guardadas. Mandá *menu* para seguir.")
+                return "✅ Nota guardada. Mandá *menu* para seguir."
+            return f"✅ {len(lineas)} notas guardadas. Mandá *menu* para seguir."
 
         if estado_actual == "esperando_tarea":
             lineas = [l.strip().lstrip("-•*").strip() for l in mensaje.splitlines() if l.strip()]
@@ -927,8 +984,8 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
                 db.add(TareaCuaderno(user_id=user.id, texto=linea))
             await db.commit()
             if len(lineas) == 1:
-                return _twiml("✅ Tarea guardada. Mandá *menu* para seguir.")
-            return _twiml(f"✅ {len(lineas)} tareas guardadas. Mandá *menu* para seguir.")
+                return "✅ Tarea guardada. Mandá *menu* para seguir."
+            return f"✅ {len(lineas)} tareas guardadas. Mandá *menu* para seguir."
 
         if estado_actual == "esperando_realizada":
             lineas = [l.strip().lstrip("-•*").strip() for l in mensaje.splitlines() if l.strip()]
@@ -964,7 +1021,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
                 for t in no_encontradas:
                     respuesta_lineas.append(f"  - {t}")
             respuesta_lineas.append("Mandá *menu* para seguir.")
-            return _twiml("\n".join(respuesta_lineas))
+            return "\n".join(respuesta_lineas)
 
         # ── Flujo mover ganado ────────────────────────────────────────────────
 
@@ -972,23 +1029,23 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             if cmd_escape == "1":
                 potreros_str = await _listar_potreros(db, user.id)
                 _set_estado(telefono, "esperando_potrero_franja")
-                return _twiml(f"¿En qué potrero?\nTus potreros: {potreros_str}")
+                return f"¿En qué potrero?\nTus potreros: {potreros_str}"
             if cmd_escape == "2":
                 potreros_str = await _listar_potreros(db, user.id)
                 _set_estado(telefono, "esperando_potrero_origen")
-                return _twiml(f"¿De qué potrero *sale* el ganado?\nTus potreros: {potreros_str}")
-            return _twiml("Respondé 1 (entre franjas) o 2 (entre potreros).")
+                return f"¿De qué potrero *sale* el ganado?\nTus potreros: {potreros_str}"
+            return "Respondé 1 (entre franjas) o 2 (entre potreros)."
 
         if estado_actual == "esperando_potrero_franja":
             potrero = await _buscar_potrero(db, user.id, mensaje)
             if not potrero:
                 potreros_str = await _listar_potreros(db, user.id)
                 _set_estado(telefono, "esperando_potrero_franja")
-                return _twiml(f"No encontré '{mensaje}'. Tus potreros: {potreros_str}")
+                return f"No encontré '{mensaje}'. Tus potreros: {potreros_str}"
             if not potrero.tiene_franjas or not potrero.cantidad_franjas:
-                return _twiml(f"{potrero.nombre} no tiene franjas configuradas.")
+                return f"{potrero.nombre} no tiene franjas configuradas."
             _set_estado(telefono, "esperando_desde_hasta_franja", {"potrero_id": potrero.id, "potrero_nombre": potrero.nombre})
-            return _twiml(
+            return (
                 f"*{potrero.nombre}* — {potrero.cantidad_franjas} franjas\n"
                 "¿De qué franja a qué franja? (ej: *F1 a F2*)"
             )
@@ -998,26 +1055,26 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             franjas = _parse_franjas(mensaje)
             if not franjas:
                 _set_estado(telefono, "esperando_desde_hasta_franja", data)
-                return _twiml("No entendí. Escribí el formato: *F1 a F2* o *1 a 2*")
+                return "No entendí. Escribí el formato: *F1 a F2* o *1 a 2*"
             desde, hasta = franjas
             potrero = await _buscar_potrero(db, user.id, data.get("potrero_nombre", ""))
             if not potrero:
                 _set_estado(telefono, "esperando_desde_hasta_franja", data)
-                return _twiml("Error al buscar el potrero. Intentá de nuevo.")
+                return "Error al buscar el potrero. Intentá de nuevo."
             respuesta = await _ejecutar_mover_franjas(db, potrero, desde, hasta)
             if not respuesta.startswith("✅"):
                 _set_estado(telefono, "esperando_desde_hasta_franja", data)
-            return _twiml(respuesta)
+            return respuesta
 
         if estado_actual == "esperando_potrero_origen":
             potrero_origen = await _buscar_potrero(db, user.id, mensaje)
             if not potrero_origen:
                 potreros_str = await _listar_potreros(db, user.id)
                 _set_estado(telefono, "esperando_potrero_origen")
-                return _twiml(f"No encontré '{mensaje}'. Tus potreros: {potreros_str}")
+                return f"No encontré '{mensaje}'. Tus potreros: {potreros_str}"
             potreros_str = await _listar_potreros(db, user.id)
             _set_estado(telefono, "esperando_potrero_destino", {"origen_id": potrero_origen.id, "origen_nombre": potrero_origen.nombre})
-            return _twiml(f"¿A qué potrero *llega* el ganado?\nTus potreros: {potreros_str}")
+            return f"¿A qué potrero *llega* el ganado?\nTus potreros: {potreros_str}"
 
         if estado_actual == "esperando_potrero_destino":
             data = _get_estado_data(telefono)
@@ -1025,16 +1082,16 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             if not potrero_destino:
                 potreros_str = await _listar_potreros(db, user.id)
                 _set_estado(telefono, "esperando_potrero_destino", data)
-                return _twiml(f"No encontré '{mensaje}'. Tus potreros: {potreros_str}")
+                return f"No encontré '{mensaje}'. Tus potreros: {potreros_str}"
             if potrero_destino.id == data.get("origen_id"):
                 _set_estado(telefono, "esperando_potrero_destino", data)
-                return _twiml("El destino debe ser diferente al origen. ¿A qué potrero va el ganado?")
+                return "El destino debe ser diferente al origen. ¿A qué potrero va el ganado?"
             _set_estado(telefono, "esperando_especie_cantidad", {
                 **data,
                 "destino_id": potrero_destino.id,
                 "destino_nombre": potrero_destino.nombre,
             })
-            return _twiml(
+            return (
                 f"*{data.get('origen_nombre')}* → *{potrero_destino.nombre}*\n"
                 "¿Cuántos animales y de qué especie?\n(ej: *50 novillos*, *30 ovejas*)"
             )
@@ -1044,15 +1101,15 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             parsed = _parse_especie_cantidad(mensaje)
             if not parsed:
                 _set_estado(telefono, "esperando_especie_cantidad", data)
-                return _twiml("No entendí. Escribí así: *50 novillos* o *30 ovejas*")
+                return "No entendí. Escribí así: *50 novillos* o *30 ovejas*"
             cantidad, especie = parsed
             potrero_origen = await _buscar_potrero(db, user.id, data.get("origen_nombre", ""))
             potrero_destino = await _buscar_potrero(db, user.id, data.get("destino_nombre", ""))
             if not potrero_origen or not potrero_destino:
                 _set_estado(telefono, "esperando_especie_cantidad", data)
-                return _twiml("Error al buscar los potreros. Intentá de nuevo.")
+                return "Error al buscar los potreros. Intentá de nuevo."
             respuesta = await _ejecutar_mover_potrero(db, user, potrero_origen, potrero_destino, cantidad, especie)
-            return _twiml(respuesta)
+            return respuesta
 
         # Fallback — estado desconocido o no manejado
         if estado_actual not in (
@@ -1061,7 +1118,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             "esperando_tipo_mov", "esperando_potrero_franja", "esperando_desde_hasta_franja",
             "esperando_potrero_origen", "esperando_potrero_destino", "esperando_especie_cantidad",
         ):
-            return _twiml(f"Estado inesperado '{estado_actual}' reiniciado. Mandá *menu* para continuar.")
+            return f"Estado inesperado '{estado_actual}' reiniciado. Mandá *menu* para continuar."
 
         if estado_actual in ("esperando_gasto", "esperando_ingreso"):
             tipo_forzado = "gasto" if estado_actual == "esperando_gasto" else "ingreso"
@@ -1075,11 +1132,11 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
                 # Forzar el tipo según el estado
                 datos["tipo"] = tipo_forzado
             except Exception:
-                return _twiml("No pude procesar el movimiento. Intentá de nuevo.")
+                return "No pude procesar el movimiento. Intentá de nuevo."
 
             monto = _parse_monto(datos.get("monto"))
             if monto is None:
-                return _twiml(
+                return (
                     f"No pude leer el monto. Intentá así: '1500 en nafta' o '45000 venta novillo'."
                 )
             tipo_mov = TipoMovimiento.gasto if tipo_forzado == "gasto" else TipoMovimiento.ingreso
@@ -1096,7 +1153,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             ))
             await db.commit()
             etiqueta = "Gasto" if tipo_forzado == "gasto" else "Ingreso"
-            return _twiml(
+            return (
                 f"✅ {etiqueta} de {user.moneda} ${monto:,.2f} registrado en '{categoria.nombre}'.\n"
                 "Mandá *menu* para seguir."
             )
@@ -1106,22 +1163,22 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
 
     if cmd == "mover":
         _set_estado(telefono, "esperando_tipo_mov")
-        return _twiml(
+        return (
             "🐄 ¿Qué tipo de movimiento?\n"
             "1️⃣ Mover entre franjas (mismo potrero)\n"
             "2️⃣ Mover entre potreros"
         )
 
     if cmd == "6":
-        return _twiml(await _cmd_tareas(user, db))
+        return await _cmd_tareas(user, db)
     if cmd == "7":
-        return _twiml(await _cmd_balance(user, db))
+        return await _cmd_balance(user, db)
     if cmd == "8":
-        return _twiml(await _armar_resumen_semanal(user, db))
+        return await _armar_resumen_semanal(user, db)
     if cmd == "9":
         potreros_str = await _listar_potreros(db, user.id)
         _set_estado(telefono, "esperando_tipo_mov")
-        return _twiml(
+        return (
             "🐄 ¿Qué tipo de movimiento?\n"
             "1️⃣ Mover entre franjas (mismo potrero)\n"
             "2️⃣ Mover entre potreros\n\n"
@@ -1131,7 +1188,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
     if cmd in _MENU_OPCIONES:
         nuevo_estado, pregunta = _MENU_OPCIONES[cmd]
         _set_estado(telefono, nuevo_estado)
-        return _twiml(pregunta)
+        return pregunta
 
     tipo_rapido = _detectar_tipo_rapido(mensaje)
 
@@ -1139,13 +1196,13 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         texto_nota = _extraer_texto_prefijo(mensaje, "nota")
         db.add(NotaCuaderno(user_id=user.id, texto=texto_nota))
         await db.commit()
-        return _twiml("✅ Nota guardada en tu cuaderno.")
+        return "✅ Nota guardada en tu cuaderno."
 
     if tipo_rapido == "tarea":
         texto_tarea = _extraer_texto_prefijo(mensaje, "tarea")
         db.add(TareaCuaderno(user_id=user.id, texto=texto_tarea))
         await db.commit()
-        return _twiml("✅ Tarea guardada en tu cuaderno.")
+        return "✅ Tarea guardada en tu cuaderno."
 
     if tipo_rapido == "tarea_realizada":
         texto_buscar = _extraer_texto_prefijo(mensaje, "tarea_realizada").lower()
@@ -1169,8 +1226,8 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             tarea_encontrada.completada = True
             tarea_encontrada.completed_at = dt.utcnow()
             await db.commit()
-            return _twiml(f"✅ Tarea completada: {tarea_encontrada.texto}")
-        return _twiml(
+            return f"✅ Tarea completada: {tarea_encontrada.texto}"
+        return (
             f"No encontré una tarea pendiente que coincida con '{texto_buscar}'. "
             "Revisá tus tareas con el comando tareas."
         )
@@ -1184,7 +1241,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         except Exception as exc:
             logger.exception("Error respondiendo consulta WhatsApp: %s", exc)
             respuesta = "No pude procesar tu consulta. Intentá desde la app."
-        return _twiml(respuesta)
+        return respuesta
 
     try:
         datos = await _clasificar(
@@ -1194,7 +1251,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         )
     except Exception as exc:
         logger.exception("Error clasificando mensaje WhatsApp: %s", exc)
-        return _twiml("Hubo un error procesando tu mensaje. Intentá de nuevo.")
+        return "Hubo un error procesando tu mensaje. Intentá de nuevo."
 
     tipo = datos.get("tipo", "consulta")
     texto = datos.get("texto") or mensaje
@@ -1208,7 +1265,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
     if tipo == "nota":
         db.add(NotaCuaderno(user_id=user.id, texto=texto))
         await db.commit()
-        return _twiml("✅ Nota guardada en tu cuaderno.")
+        return "✅ Nota guardada en tu cuaderno."
 
     if tipo == "tarea":
         db.add(TareaCuaderno(
@@ -1219,13 +1276,13 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         await db.commit()
         fp = _parse_date(fecha_str)
         if fp:
-            return _twiml(f"✅ Tarea guardada para el {fp.strftime('%d/%m/%Y')}.")
-        return _twiml("✅ Tarea guardada en tu cuaderno.")
+            return f"✅ Tarea guardada para el {fp.strftime('%d/%m/%Y')}."
+        return "✅ Tarea guardada en tu cuaderno."
 
     if tipo in ("gasto", "ingreso"):
         monto = _parse_monto(monto_raw)
         if monto is None:
-            return _twiml("No pude identificar el monto. Intentá: 'Gasté 1500 en combustible'.")
+            return "No pude identificar el monto. Intentá: 'Gasté 1500 en combustible'."
         tipo_mov = TipoMovimiento.gasto if tipo == "gasto" else TipoMovimiento.ingreso
         cats_lista = cats_gasto if tipo_mov == TipoMovimiento.gasto else cats_ingreso
         categoria = await _resolver_categoria(db, user.id, tipo_mov, cat_sugerida, cats_lista)
@@ -1240,14 +1297,14 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         ))
         await db.commit()
         etiqueta = "Gasto" if tipo == "gasto" else "Ingreso"
-        return _twiml(f"✅ {etiqueta} de {moneda} ${monto:,.2f} registrado en '{categoria.nombre}': {texto}")
+        return f"✅ {etiqueta} de {moneda} ${monto:,.2f} registrado en '{categoria.nombre}': {texto}"
 
     if tipo == "cobro":
         monto = _parse_monto(monto_raw)
         if monto is None:
-            return _twiml("No pude identificar el monto. Intentá: 'Juan me debe 5000'.")
+            return "No pude identificar el monto. Intentá: 'Juan me debe 5000'."
         if not contraparte:
-            return _twiml("No pude identificar el nombre del cliente. Intentá: 'Pedro me debe 3000'.")
+            return "No pude identificar el nombre del cliente. Intentá: 'Pedro me debe 3000'."
         fecha_venc = _parse_date(vencimiento_str)
         cliente = await _get_or_create_cliente(db, user.id, contraparte)
         db.add(CuentaCobrar(
@@ -1260,14 +1317,14 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         ))
         await db.commit()
         venc_str = f" (vence {fecha_venc.strftime('%d/%m/%Y')})" if fecha_venc else ""
-        return _twiml(f"✅ Cobro de {moneda} ${monto:,.2f} registrado para {cliente.nombre}{venc_str}.")
+        return f"✅ Cobro de {moneda} ${monto:,.2f} registrado para {cliente.nombre}{venc_str}."
 
     if tipo == "pago":
         monto = _parse_monto(monto_raw)
         if monto is None:
-            return _twiml("No pude identificar el monto. Intentá: 'Debo 8000 a AgroInsumos'.")
+            return "No pude identificar el monto. Intentá: 'Debo 8000 a AgroInsumos'."
         if not contraparte:
-            return _twiml("No pude identificar el nombre del proveedor. Intentá: 'Debo 8000 a AgroInsumos'.")
+            return "No pude identificar el nombre del proveedor. Intentá: 'Debo 8000 a AgroInsumos'."
         fecha_venc = _parse_date(vencimiento_str)
         proveedor = await _get_or_create_proveedor(db, user.id, contraparte)
         db.add(CuentaPagar(
@@ -1280,31 +1337,31 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
         ))
         await db.commit()
         venc_str = f" (vence {fecha_venc.strftime('%d/%m/%Y')})" if fecha_venc else ""
-        return _twiml(f"✅ Pago de {moneda} ${monto:,.2f} registrado para {proveedor.nombre}{venc_str}.")
+        return f"✅ Pago de {moneda} ${monto:,.2f} registrado para {proveedor.nombre}{venc_str}."
 
     if tipo == "marcar_pagado":
         if not contraparte:
-            return _twiml("No pude identificar el proveedor. Intentá: 'Le pagué a AgroInsumos'.")
+            return "No pude identificar el proveedor. Intentá: 'Le pagué a AgroInsumos'."
         cuenta = await _marcar_cuenta_pagada(db, user.id, contraparte, monto_raw)
         if cuenta is None:
-            return _twiml(
+            return (
                 f"No encontré un pago pendiente con '{contraparte}'. "
                 "Verificá el nombre o registralo primero."
             )
         monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
-        return _twiml(f"✅ Pago a {contraparte} por {monto_fmt} marcado como realizado.")
+        return f"✅ Pago a {contraparte} por {monto_fmt} marcado como realizado."
 
     if tipo == "marcar_cobrado":
         if not contraparte:
-            return _twiml("No pude identificar el cliente. Intentá: 'Me pagó Juan Pérez'.")
+            return "No pude identificar el cliente. Intentá: 'Me pagó Juan Pérez'."
         cuenta = await _marcar_cuenta_cobrada(db, user.id, contraparte, monto_raw)
         if cuenta is None:
-            return _twiml(
+            return (
                 f"No encontré un cobro pendiente con '{contraparte}'. "
                 "Verificá el nombre o registralo primero."
             )
         monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
-        return _twiml(f"✅ Cobro de {contraparte} por {monto_fmt} marcado como recibido.")
+        return f"✅ Cobro de {contraparte} por {monto_fmt} marcado como recibido."
 
     try:
         respuesta = await _responder_consulta(mensaje, user, db)

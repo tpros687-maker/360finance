@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
+    META_ACCESS_TOKEN: str = ""
+    META_PHONE_NUMBER_ID: str = ""
+    META_VERIFY_TOKEN: str = "whatsapp-verify-360"
     MP_ACCESS_TOKEN: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
 
