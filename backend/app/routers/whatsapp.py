@@ -979,6 +979,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             _clear_estado(telefono)
             return _MENU_TEXTO
 
+        estado_data = _get_estado_data(telefono)  # guardar datos ANTES de limpiar
         _clear_estado(telefono)  # consumir estado
 
         if estado_actual == "esperando_nota":
@@ -1063,7 +1064,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             )
 
         if estado_actual == "esperando_desde_hasta_franja":
-            data = _get_estado_data(telefono)
+            data = estado_data
             franjas = _parse_franjas(mensaje)
             if not franjas:
                 _set_estado(telefono, "esperando_desde_hasta_franja", data)
@@ -1089,7 +1090,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             return f"¿A qué potrero *llega* el ganado?\nTus potreros: {potreros_str}"
 
         if estado_actual == "esperando_potrero_destino":
-            data = _get_estado_data(telefono)
+            data = estado_data
             potrero_destino = await _buscar_potrero(db, user.id, mensaje)
             if not potrero_destino:
                 potreros_str = await _listar_potreros(db, user.id)
@@ -1109,7 +1110,7 @@ async def _procesar_mensaje(mensaje: str, telefono: str, user: User, db: AsyncSe
             )
 
         if estado_actual == "esperando_especie_cantidad":
-            data = _get_estado_data(telefono)
+            data = estado_data
             lista_parsed = _parse_multiples_especies(mensaje)
             if not lista_parsed:
                 _set_estado(telefono, "esperando_especie_cantidad", data)
