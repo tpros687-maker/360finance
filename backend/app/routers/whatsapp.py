@@ -2,7 +2,7 @@
 import base64
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
@@ -275,9 +275,58 @@ async def _procesar_imagen_comprobante(
     return f"✅ Comprobante procesado: gasto de ${monto:,.2f} en {descripcion}"
 
 
+# ── Estado de conversación (menú guiado) ─────────────────────────────────────
+
+# { telefono: {"estado": str, "expires": datetime} }
+_estados: dict[str, dict] = {}
+
+_TIMEOUT_MENU = 5  # minutos sin actividad → estado se resetea
+
+
+def _get_estado(telefono: str) -> str | None:
+    s = _estados.get(telefono)
+    if s and s["expires"] > datetime.utcnow():
+        return s["estado"]
+    _estados.pop(telefono, None)
+    return None
+
+
+def _set_estado(telefono: str, estado: str) -> None:
+    _estados[telefono] = {
+        "estado": estado,
+        "expires": datetime.utcnow() + timedelta(minutes=_TIMEOUT_MENU),
+    }
+
+
+def _clear_estado(telefono: str) -> None:
+    _estados.pop(telefono, None)
+
+
+_MENU_TEXTO = (
+    "📋 *Menú 360 Agro Finance*\n\n"
+    "1️⃣  Guardar nota\n"
+    "2️⃣  Guardar tarea\n"
+    "3️⃣  Marcar tarea como hecha\n"
+    "4️⃣  Registrar gasto\n"
+    "5️⃣  Registrar ingreso\n"
+    "6️⃣  Ver tareas pendientes\n"
+    "7️⃣  Balance del mes\n"
+    "8️⃣  Resumen del día\n\n"
+    "Respondé con el número de la opción."
+)
+
+_MENU_OPCIONES = {
+    "1": ("esperando_nota",    "📝 ¿Qué querés anotar?"),
+    "2": ("esperando_tarea",   "📅 ¿Qué tarea querés agregar?"),
+    "3": ("esperando_realizada", "☑️ ¿Qué tarea completaste? (escribí parte del nombre)"),
+    "4": ("esperando_gasto",   "💸 Describí el gasto (ej: 1500 en nafta)"),
+    "5": ("esperando_ingreso", "💰 Describí el ingreso (ej: vendí un novillo en 45000)"),
+}
+
+
 # ── Comandos rápidos (sin Groq) ───────────────────────────────────────────────
 
-_COMANDOS = {"resumen", "tareas", "gastos", "balance", "ayuda"}
+_COMANDOS = {"resumen", "tareas", "gastos", "balance", "ayuda", "menu", "menú"}
 
 # Palabras interrogativas en español — si el mensaje empieza con alguna → consulta
 _INTERROGATIVAS = (
@@ -465,6 +514,8 @@ async def _handle_comando(cmd: str, user: User, db: AsyncSession) -> str | None:
         return await _cmd_balance(user, db)
     if cmd == "ayuda":
         return _cmd_ayuda()
+    if cmd in ("menu", "menú"):
+        return _MENU_TEXTO
     return None
 
 
@@ -665,10 +716,98 @@ async def whatsapp_webhook(
     if not mensaje:
         return _twiml("No recibí ningún mensaje. Intentá de nuevo.")
 
-    # Comandos rápidos — detección por palabra exacta, sin Groq
+    # ── Manejo de estados del menú guiado ─────────────────────────────────────
+    estado_actual = _get_estado(telefono)
+
+    if estado_actual:
+        _clear_estado(telefono)  # consumir estado
+
+        if estado_actual == "esperando_nota":
+            db.add(NotaCuaderno(user_id=user.id, texto=mensaje))
+            await db.commit()
+            return _twiml("✅ Nota guardada. Mandá *menu* para seguir.")
+
+        if estado_actual == "esperando_tarea":
+            db.add(TareaCuaderno(user_id=user.id, texto=mensaje))
+            await db.commit()
+            return _twiml("✅ Tarea guardada. Mandá *menu* para seguir.")
+
+        if estado_actual == "esperando_realizada":
+            texto_buscar = mensaje.lower()
+            result_t = await db.execute(
+                select(TareaCuaderno).where(
+                    TareaCuaderno.user_id == user.id,
+                    TareaCuaderno.completada == False,  # noqa: E712
+                ).order_by(TareaCuaderno.created_at.desc())
+            )
+            tareas_p = result_t.scalars().all()
+            encontrada = next((t for t in tareas_p if texto_buscar in t.texto.lower()), None)
+            if encontrada:
+                encontrada.completada = True
+                encontrada.completed_at = datetime.utcnow()
+                await db.commit()
+                return _twiml(f"✅ Tarea completada: {encontrada.texto}\nMandá *menu* para seguir.")
+            return _twiml(
+                f"No encontré tarea pendiente con '{mensaje}'.\n"
+                "Mandá *tareas* para ver la lista completa."
+            )
+
+        if estado_actual in ("esperando_gasto", "esperando_ingreso"):
+            tipo_forzado = "gasto" if estado_actual == "esperando_gasto" else "ingreso"
+            cats_g = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
+            cats_i = await _cargar_categorias(db, user.id, TipoMovimiento.ingreso)
+            try:
+                datos = await _clasificar(
+                    mensaje, user.nombre, user.moneda,
+                    [c.nombre for c in cats_g], [c.nombre for c in cats_i],
+                )
+                # Forzar el tipo según el estado
+                datos["tipo"] = tipo_forzado
+            except Exception:
+                return _twiml("No pude procesar el movimiento. Intentá de nuevo.")
+
+            monto = _parse_monto(datos.get("monto"))
+            if monto is None:
+                return _twiml(
+                    f"No pude leer el monto. Intentá así: '1500 en nafta' o '45000 venta novillo'."
+                )
+            tipo_mov = TipoMovimiento.gasto if tipo_forzado == "gasto" else TipoMovimiento.ingreso
+            cats_lista = cats_g if tipo_mov == TipoMovimiento.gasto else cats_i
+            categoria = await _resolver_categoria(db, user.id, tipo_mov, datos.get("categoria"), cats_lista)
+            db.add(Registro(
+                user_id=user.id,
+                categoria_id=categoria.id,
+                tipo=tipo_mov,
+                monto=monto,
+                moneda=datos.get("moneda") or user.moneda,
+                fecha=_parse_date(datos.get("fecha")) or date.today(),
+                descripcion=datos.get("texto") or mensaje,
+            ))
+            await db.commit()
+            etiqueta = "Gasto" if tipo_forzado == "gasto" else "Ingreso"
+            return _twiml(
+                f"✅ {etiqueta} de {user.moneda} ${monto:,.2f} registrado en '{categoria.nombre}'.\n"
+                "Mandá *menu* para seguir."
+            )
+
+    # ── Comandos rápidos — detección por palabra exacta, sin Groq ─────────────
     cmd = mensaje.lower().strip()
+
+    # Opción del menú (número solo)
+    if cmd in _MENU_OPCIONES:
+        nuevo_estado, pregunta = _MENU_OPCIONES[cmd]
+        if cmd in ("6",):
+            return _twiml(await _cmd_tareas(user, db))
+        if cmd in ("7",):
+            return _twiml(await _cmd_balance(user, db))
+        if cmd in ("8",):
+            return _twiml(await _armar_resumen(user, db))
+        _set_estado(telefono, nuevo_estado)
+        return _twiml(pregunta)
+
     if cmd in _COMANDOS:
         try:
+            _clear_estado(telefono)  # salir de cualquier estado al usar comando directo
             respuesta = await _handle_comando(cmd, user, db)
             if respuesta:
                 return _twiml(respuesta)
