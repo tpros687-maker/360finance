@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
-import { apiClient } from "@/lib/authApi";
+import { api } from "@/lib/axios";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ interface ResumenMensual {
 // ── API ───────────────────────────────────────────────────────────────────────
 
 async function getResumenes(): Promise<ResumenMensual[]> {
-  const res = await apiClient.get("/resumenes");
+  const res = await api.get<ResumenMensual[]>("/resumenes");
   return res.data;
 }
 
@@ -42,7 +42,7 @@ async function generarResumen(year?: number, month?: number): Promise<ResumenMen
   const params = new URLSearchParams();
   if (year) params.set("year", String(year));
   if (month) params.set("month", String(month));
-  const res = await apiClient.post(`/resumenes/generar?${params.toString()}`);
+  const res = await api.post<ResumenMensual>(`/resumenes/generar?${params.toString()}`);
   return res.data;
 }
 
