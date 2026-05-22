@@ -701,14 +701,6 @@ async def whatsapp_webhook(
             "Registrate en finance.360rural.com"
         )
 
-    # ── DEBUG: después del user lookup ───────────────────────────────────────
-    _msg_debug = (Body or "").strip()
-    _cmd_match = _msg_debug.lower() in _COMANDOS
-    return _twiml(
-        f"DEBUG user={user.id} body={repr(_msg_debug[:20])} cmd={_cmd_match}"
-    )
-    # ── FIN DEBUG ─────────────────────────────────────────────────────────────
-
     # Imagen adjunta — procesar como comprobante
     if MediaUrl0:
         try:
@@ -729,8 +721,13 @@ async def whatsapp_webhook(
     # ── Comandos directos — PRIMERO, antes de cualquier otra lógica ───────────
     cmd_directo = mensaje.lower().strip()
     if cmd_directo in _COMANDOS:
-        # TEST TEMPORAL: respuesta hardcodeada sin llamar a nada
-        return _twiml(f"CMD:{cmd_directo} recibido OK")
+        try:
+            respuesta_cmd = await _handle_comando(cmd_directo, user, db)
+            if respuesta_cmd is not None:
+                return _twiml(respuesta_cmd)
+        except Exception as exc:
+            logger.exception("Error en _handle_comando '%s': %s", cmd_directo, exc)
+            return _twiml(f"Hubo un error procesando '{cmd_directo}'. Intentá de nuevo.")
 
     # ── Manejo de estados del menú guiado ─────────────────────────────────────
     estado_actual = _get_estado(telefono)
