@@ -294,15 +294,32 @@ _INTERROGATIVAS = (
 def _detectar_tipo_rapido(mensaje: str) -> str | None:
     """
     Detecta el tipo de mensaje sin usar Groq.
-    Retorna 'nota', 'tarea' o 'consulta' si hay certeza, None si hay que usar Groq.
+    Retorna 'nota', 'tarea', 'tarea_realizada' o 'consulta' si hay certeza, None si hay que usar Groq.
     """
     lower = mensaje.lower().strip()
 
-    # Prefijos explícitos del usuario
+    # Prefijos largos
     if lower.startswith("nota:") or lower.startswith("nota "):
         return "nota"
     if lower.startswith("tarea:") or lower.startswith("tarea "):
         return "tarea"
+
+    # Prefijos cortos
+    if lower.startswith("n:") or lower.startswith("n "):
+        return "nota"
+    if lower.startswith("t:") or lower.startswith("t "):
+        return "tarea"
+
+    # Símbolos rápidos
+    if mensaje.startswith("!"):
+        return "nota"
+    if mensaje.startswith("*"):
+        return "tarea"
+
+    # Marcar tarea como realizada
+    for prefijo in ("tarea realizada:", "tarea realizada ", "realizada:", "hice:", "completé:", "complete:", "listo:"):
+        if lower.startswith(prefijo):
+            return "tarea_realizada"
 
     # Mensaje con signo de pregunta → siempre consulta
     if "?" in mensaje:
@@ -314,6 +331,27 @@ def _detectar_tipo_rapido(mensaje: str) -> str | None:
             return "consulta"
 
     return None
+
+
+def _extraer_texto_prefijo(mensaje: str, tipo: str) -> str:
+    """Quita el prefijo del mensaje y devuelve el texto limpio."""
+    lower = mensaje.lower().strip()
+    prefijos = {
+        "nota": ("nota:", "nota ", "n:", "n "),
+        "tarea": ("tarea:", "tarea ", "t:", "t "),
+        "tarea_realizada": (
+            "tarea realizada:", "tarea realizada ", "realizada:",
+            "hice:", "completé:", "complete:", "listo:",
+        ),
+    }
+    for p in prefijos.get(tipo, ()):
+        if lower.startswith(p):
+            # quitar el símbolo ! o * también
+            return mensaje[len(p):].strip()
+    # Símbolos de un caracter
+    if mensaje.startswith("!") or mensaje.startswith("*"):
+        return mensaje[1:].strip()
+    return mensaje.strip()
 
 
 async def _cmd_tareas(user: User, db: AsyncSession) -> str:
@@ -393,18 +431,24 @@ async def _cmd_balance(user: User, db: AsyncSession) -> str:
 def _cmd_ayuda() -> str:
     return (
         "🌾 *360 Agro Finance — Guía rápida*\n\n"
-        "📋 *Guardar cosas:*\n"
-        "  nota: revisé el alambrado sur\n"
-        "  tarea: comprar sal mineral el lunes\n\n"
+        "📋 *Guardar nota (cualquiera de estas):*\n"
+        "  nota: revisé el alambrado\n"
+        "  n: revisé el alambrado\n"
+        "  ! revisé el alambrado\n\n"
+        "✅ *Guardar tarea:*\n"
+        "  tarea: comprar sal el lunes\n"
+        "  t: comprar sal el lunes\n"
+        "  * comprar sal el lunes\n\n"
+        "☑️ *Marcar tarea como hecha:*\n"
+        "  listo: comprar sal\n"
+        "  hice: comprar sal\n\n"
         "💰 *Registrar movimientos:*\n"
         "  gasté 1500 en nafta\n"
         "  vendí 3 novillos en 90000\n"
-        "  Juan me debe 5000\n"
-        "  le pagué al veterinario 8000\n\n"
-        "❓ *Preguntas — usá el signo ?:*\n"
-        "  cuánto gasté este mes?\n"
-        "  qué tareas tengo pendientes?\n\n"
-        "📊 *Comandos directos:*\n"
+        "  Juan me debe 5000\n\n"
+        "❓ *Preguntas — usá ?:*\n"
+        "  cuánto gasté este mes?\n\n"
+        "📊 *Comandos:*\n"
         "  resumen · tareas · gastos · balance · ayuda"
     )
 
@@ -634,26 +678,48 @@ async def whatsapp_webhook(
 
     # Detección rápida sin Groq (prefijos explícitos, preguntas, palabras interrogativas)
     tipo_rapido = _detectar_tipo_rapido(mensaje)
+
     if tipo_rapido == "nota":
-        # Quitar prefijo "nota:" o "nota " del texto
-        texto_nota = mensaje.strip()
-        for prefijo in ("nota:", "nota "):
-            if texto_nota.lower().startswith(prefijo):
-                texto_nota = texto_nota[len(prefijo):].strip()
-                break
+        texto_nota = _extraer_texto_prefijo(mensaje, "nota")
         db.add(NotaCuaderno(user_id=user.id, texto=texto_nota))
         await db.commit()
         return _twiml("✅ Nota guardada en tu cuaderno.")
 
     if tipo_rapido == "tarea":
-        texto_tarea = mensaje.strip()
-        for prefijo in ("tarea:", "tarea "):
-            if texto_tarea.lower().startswith(prefijo):
-                texto_tarea = texto_tarea[len(prefijo):].strip()
-                break
+        texto_tarea = _extraer_texto_prefijo(mensaje, "tarea")
         db.add(TareaCuaderno(user_id=user.id, texto=texto_tarea))
         await db.commit()
         return _twiml("✅ Tarea guardada en tu cuaderno.")
+
+    if tipo_rapido == "tarea_realizada":
+        texto_buscar = _extraer_texto_prefijo(mensaje, "tarea_realizada").lower()
+        result_t = await db.execute(
+            select(TareaCuaderno).where(
+                TareaCuaderno.user_id == user.id,
+                TareaCuaderno.completada == False,  # noqa: E712
+            ).order_by(TareaCuaderno.created_at.desc())
+        )
+        tareas_pendientes = result_t.scalars().all()
+        # Buscar la tarea cuyo texto contenga las palabras clave
+        tarea_encontrada = None
+        for t in tareas_pendientes:
+            if texto_buscar and texto_buscar in t.texto.lower():
+                tarea_encontrada = t
+                break
+        if tarea_encontrada is None and tareas_pendientes:
+            # Si no matchea, marcar la más reciente como fallback solo si el texto es muy corto
+            if len(texto_buscar) < 4:
+                tarea_encontrada = tareas_pendientes[0]
+        if tarea_encontrada:
+            from datetime import datetime
+            tarea_encontrada.completada = True
+            tarea_encontrada.completed_at = datetime.utcnow().date().isoformat()
+            await db.commit()
+            return _twiml(f"✅ Tarea completada: {tarea_encontrada.texto}")
+        return _twiml(
+            f"No encontré una tarea pendiente que coincida con '{texto_buscar}'. "
+            "Revisá tus tareas con el comando tareas."
+        )
 
     cats_gasto = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
     cats_ingreso = await _cargar_categorias(db, user.id, TipoMovimiento.ingreso)
