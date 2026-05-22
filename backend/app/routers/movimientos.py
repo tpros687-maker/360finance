@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models.mapa import Animal, MovimientoGanado, Potrero
+from app.models.mapa import Animal, FranjaEstado, MovimientoGanado, Potrero
 from app.models.user import User
 from app.schemas.mapa import MovimientoCreate, MovimientoRead
 
@@ -31,6 +31,53 @@ async def _get_own_movimiento(mov_id: int, user_id: int, db: AsyncSession) -> Mo
     if mov.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin permisos")
     return mov
+
+
+async def _activar_franja_inicial(potrero_id: int, db: AsyncSession) -> None:
+    """Al recibir ganado en un potrero con franjas, activa la franja 1 (rotación).
+
+    - Crea las filas de FranjaEstado si aún no existen (igual que el panel de franjas).
+    - Solo activa la franja 1 si NO hay otra franja en uso, para no interrumpir
+      una rotación que ya esté en curso.
+    - El potrero deja de estar en descanso porque vuelve a tener animales.
+    """
+    potrero = await db.get(Potrero, potrero_id)
+    if potrero is None or not potrero.tiene_franjas or not potrero.cantidad_franjas:
+        return
+
+    result = await db.execute(
+        select(FranjaEstado)
+        .where(FranjaEstado.potrero_id == potrero_id)
+        .order_by(FranjaEstado.numero)
+    )
+    franjas = list(result.scalars().all())
+
+    # Crear las franjas que falten (1..cantidad_franjas)
+    nums_existentes = {f.numero for f in franjas}
+    for n in range(1, potrero.cantidad_franjas + 1):
+        if n not in nums_existentes:
+            nueva = FranjaEstado(
+                potrero_id=potrero_id,
+                numero=n,
+                en_uso=False,
+                dias_descanso_objetivo=potrero.dias_por_franja,
+            )
+            db.add(nueva)
+            franjas.append(nueva)
+    await db.flush()
+
+    # Si ya hay una rotación en curso (alguna franja en uso), no tocar nada
+    if any(f.en_uso for f in franjas):
+        potrero.en_descanso = False
+        return
+
+    franja_1 = next((f for f in franjas if f.numero == 1), None)
+    if franja_1 is not None:
+        franja_1.en_uso = True
+        franja_1.fecha_entrada = date.today()
+        franja_1.fecha_inicio_descanso = None
+
+    potrero.en_descanso = False
 
 
 async def _transferir_animales(mov: MovimientoGanado, user_id: int, db: AsyncSession) -> None:
@@ -81,6 +128,9 @@ async def _transferir_animales(mov: MovimientoGanado, user_id: int, db: AsyncSes
         if potrero_origen is not None:
             potrero_origen.en_descanso = True
             potrero_origen.fecha_descanso = date.today()
+
+    # ── Destino con franjas → activar franja 1 (rotación) ────────────────────
+    await _activar_franja_inicial(mov.potrero_destino_id, db)
 
 
 def _mov_to_read(mov: MovimientoGanado, origen_nombre: str, destino_nombre: str) -> MovimientoRead:
