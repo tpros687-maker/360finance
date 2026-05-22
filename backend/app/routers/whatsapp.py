@@ -720,6 +720,12 @@ async def whatsapp_webhook(
     estado_actual = _get_estado(telefono)
 
     if estado_actual:
+        # Si el usuario manda "menu", "salir" o "cancelar" estando en un estado → resetear
+        cmd_escape = mensaje.lower().strip()
+        if cmd_escape in ("menu", "menú", "salir", "cancelar", "cancel"):
+            _clear_estado(telefono)
+            return _twiml(_MENU_TEXTO)
+
         _clear_estado(telefono)  # consumir estado
 
         if estado_actual == "esperando_nota":
