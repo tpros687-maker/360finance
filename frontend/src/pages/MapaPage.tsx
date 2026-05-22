@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import turfArea from "@turf/area";
+import turfIntersect from "@turf/intersect";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { List } from "lucide-react";
 
@@ -90,7 +91,7 @@ function buildPotreroFeatures(potreros: Potrero[]) {
   };
 }
 
-/** Divide potrero bbox into N vertical strips colored by franja state. */
+/** Divide potrero polygon into N vertical strips clipped to the actual shape. */
 function buildFranjaStrips(potreros: Potrero[], franjasByPotrero: Map<number, FranjaEstado[]>) {
   const features: GeoJSON.Feature[] = [];
 
@@ -109,25 +110,41 @@ function buildFranjaStrips(potreros: Potrero[], franjasByPotrero: Map<number, Fr
     const n = p.cantidad_franjas;
     const step = (maxLng - minLng) / n;
 
+    const potreroFeature: GeoJSON.Feature<GeoJSON.Polygon> = {
+      type: "Feature",
+      geometry: p.geometria,
+      properties: {},
+    };
+
     franjas.forEach((f, i) => {
       const x0 = minLng + i * step;
       const x1 = minLng + (i + 1) * step;
-      // small inset so strips don't overlap potrero border
-      const pad = step * 0.04;
-      const latPad = (maxLat - minLat) * 0.04;
-      const stripCoords: number[][] = [
-        [x0 + pad, minLat + latPad],
-        [x1 - pad, minLat + latPad],
-        [x1 - pad, maxLat - latPad],
-        [x0 + pad, maxLat - latPad],
-        [x0 + pad, minLat + latPad],
-      ];
+      const margin = (maxLat - minLat) * 0.001; // tiny margin to avoid border overlap
+
+      const stripFeature: GeoJSON.Feature<GeoJSON.Polygon> = {
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [x0, minLat - margin],
+            [x1, minLat - margin],
+            [x1, maxLat + margin],
+            [x0, maxLat + margin],
+            [x0, minLat - margin],
+          ]],
+        },
+        properties: {},
+      };
+
+      // Clip strip to potrero shape
+      const clipped = turfIntersect({ type: "FeatureCollection", features: [potreroFeature, stripFeature] });
+      if (!clipped) return;
+
       const centerLng = (x0 + x1) / 2;
       const centerLat = (minLat + maxLat) / 2;
 
       features.push({
-        type: "Feature",
-        geometry: { type: "Polygon", coordinates: [stripCoords] },
+        ...clipped,
         properties: {
           franja_numero: f.numero,
           estado: f.estado,
