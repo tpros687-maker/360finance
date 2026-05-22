@@ -1080,7 +1080,6 @@ async def whatsapp_webhook(
     # ── Comandos rápidos — detección por palabra exacta, sin Groq ─────────────
     cmd = mensaje.lower().strip()
 
-    # Comando directo "mover" — inicia el flujo con estado
     if cmd == "mover":
         _set_estado(telefono, "esperando_tipo_mov")
         return _twiml(
@@ -1089,7 +1088,6 @@ async def whatsapp_webhook(
             "2️⃣ Mover entre potreros"
         )
 
-    # Opciones del menú directas (sin estado)
     if cmd == "6":
         return _twiml(await _cmd_tareas(user, db))
     if cmd == "7":
@@ -1106,14 +1104,11 @@ async def whatsapp_webhook(
             f"Tus potreros: {potreros_str}"
         )
 
-    # Opciones del menú con estado (1-5)
     if cmd in _MENU_OPCIONES:
         nuevo_estado, pregunta = _MENU_OPCIONES[cmd]
         _set_estado(telefono, nuevo_estado)
         return _twiml(pregunta)
 
-
-    # Detección rápida sin Groq (prefijos explícitos, preguntas, palabras interrogativas)
     tipo_rapido = _detectar_tipo_rapido(mensaje)
 
     if tipo_rapido == "nota":
@@ -1137,14 +1132,12 @@ async def whatsapp_webhook(
             ).order_by(TareaCuaderno.created_at.desc())
         )
         tareas_pendientes = result_t.scalars().all()
-        # Buscar la tarea cuyo texto contenga las palabras clave
         tarea_encontrada = None
         for t in tareas_pendientes:
             if texto_buscar and texto_buscar in t.texto.lower():
                 tarea_encontrada = t
                 break
         if tarea_encontrada is None and tareas_pendientes:
-            # Si no matchea, marcar la más reciente como fallback solo si el texto es muy corto
             if len(texto_buscar) < 4:
                 tarea_encontrada = tareas_pendientes[0]
         if tarea_encontrada:
@@ -1161,7 +1154,6 @@ async def whatsapp_webhook(
     cats_gasto = await _cargar_categorias(db, user.id, TipoMovimiento.gasto)
     cats_ingreso = await _cargar_categorias(db, user.id, TipoMovimiento.ingreso)
 
-    # Si es consulta detectada rápido, pasamos directamente a responder sin clasificar
     if tipo_rapido == "consulta":
         try:
             respuesta = await _responder_consulta(mensaje, user, db)
@@ -1189,13 +1181,11 @@ async def whatsapp_webhook(
     contraparte = (datos.get("nombre_contraparte") or "").strip()
     vencimiento_str = datos.get("fecha_vencimiento")
 
-    # ── Nota ─────────────────────────────────────────────────────────────────
     if tipo == "nota":
         db.add(NotaCuaderno(user_id=user.id, texto=texto))
         await db.commit()
         return _twiml("✅ Nota guardada en tu cuaderno.")
 
-    # ── Tarea ─────────────────────────────────────────────────────────────────
     if tipo == "tarea":
         db.add(TareaCuaderno(
             user_id=user.id,
@@ -1208,16 +1198,13 @@ async def whatsapp_webhook(
             return _twiml(f"✅ Tarea guardada para el {fp.strftime('%d/%m/%Y')}.")
         return _twiml("✅ Tarea guardada en tu cuaderno.")
 
-    # ── Gasto / Ingreso ───────────────────────────────────────────────────────
     if tipo in ("gasto", "ingreso"):
         monto = _parse_monto(monto_raw)
         if monto is None:
             return _twiml("No pude identificar el monto. Intentá: 'Gasté 1500 en combustible'.")
-
         tipo_mov = TipoMovimiento.gasto if tipo == "gasto" else TipoMovimiento.ingreso
         cats_lista = cats_gasto if tipo_mov == TipoMovimiento.gasto else cats_ingreso
         categoria = await _resolver_categoria(db, user.id, tipo_mov, cat_sugerida, cats_lista)
-
         db.add(Registro(
             user_id=user.id,
             categoria_id=categoria.id,
@@ -1231,14 +1218,12 @@ async def whatsapp_webhook(
         etiqueta = "Gasto" if tipo == "gasto" else "Ingreso"
         return _twiml(f"✅ {etiqueta} de {moneda} ${monto:,.2f} registrado en '{categoria.nombre}': {texto}")
 
-    # ── Cobro ─────────────────────────────────────────────────────────────────
     if tipo == "cobro":
         monto = _parse_monto(monto_raw)
         if monto is None:
             return _twiml("No pude identificar el monto. Intentá: 'Juan me debe 5000'.")
         if not contraparte:
             return _twiml("No pude identificar el nombre del cliente. Intentá: 'Pedro me debe 3000'.")
-
         fecha_venc = _parse_date(vencimiento_str)
         cliente = await _get_or_create_cliente(db, user.id, contraparte)
         db.add(CuentaCobrar(
@@ -1253,14 +1238,12 @@ async def whatsapp_webhook(
         venc_str = f" (vence {fecha_venc.strftime('%d/%m/%Y')})" if fecha_venc else ""
         return _twiml(f"✅ Cobro de {moneda} ${monto:,.2f} registrado para {cliente.nombre}{venc_str}.")
 
-    # ── Pago ──────────────────────────────────────────────────────────────────
     if tipo == "pago":
         monto = _parse_monto(monto_raw)
         if monto is None:
             return _twiml("No pude identificar el monto. Intentá: 'Debo 8000 a AgroInsumos'.")
         if not contraparte:
             return _twiml("No pude identificar el nombre del proveedor. Intentá: 'Debo 8000 a AgroInsumos'.")
-
         fecha_venc = _parse_date(vencimiento_str)
         proveedor = await _get_or_create_proveedor(db, user.id, contraparte)
         db.add(CuentaPagar(
@@ -1275,7 +1258,6 @@ async def whatsapp_webhook(
         venc_str = f" (vence {fecha_venc.strftime('%d/%m/%Y')})" if fecha_venc else ""
         return _twiml(f"✅ Pago de {moneda} ${monto:,.2f} registrado para {proveedor.nombre}{venc_str}.")
 
-    # ── Marcar pagado (CuentaPagar → pagado) ─────────────────────────────────
     if tipo == "marcar_pagado":
         if not contraparte:
             return _twiml("No pude identificar el proveedor. Intentá: 'Le pagué a AgroInsumos'.")
@@ -1288,7 +1270,6 @@ async def whatsapp_webhook(
         monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
         return _twiml(f"✅ Pago a {contraparte} por {monto_fmt} marcado como realizado.")
 
-    # ── Marcar cobrado (CuentaCobrar → pagado) ────────────────────────────────
     if tipo == "marcar_cobrado":
         if not contraparte:
             return _twiml("No pude identificar el cliente. Intentá: 'Me pagó Juan Pérez'.")
@@ -1301,7 +1282,6 @@ async def whatsapp_webhook(
         monto_fmt = f"{user.moneda} ${cuenta.monto:,.2f}"
         return _twiml(f"✅ Cobro de {contraparte} por {monto_fmt} marcado como recibido.")
 
-    # ── Consulta (default) ────────────────────────────────────────────────────
     try:
         respuesta = await _responder_consulta(mensaje, user, db)
     except Exception as exc:
