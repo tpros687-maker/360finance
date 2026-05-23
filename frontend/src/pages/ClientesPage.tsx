@@ -558,14 +558,14 @@ export default function ClientesPage() {
   }
 
   return (
-    <div className="page-fade p-6 space-y-6">
+    <div className="page-fade p-3 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-agro-text">Clientes</h1>
           <p className="text-agro-muted mt-1">Gestioná tus clientes y cuentas por cobrar</p>
         </div>
-        <Button onClick={openNew} className="gap-2">
+        <Button onClick={openNew} className="gap-2 self-start sm:self-auto">
           <Plus className="h-4 w-4" />
           Nuevo cliente
         </Button>

@@ -129,7 +129,7 @@ export default function AsistentePage() {
               {/* Bubble */}
               <div
                 className={cn(
-                  "max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
+                  "max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words overflow-x-auto",
                   msg.role === "user"
                     ? "rounded-br-sm bg-agro-primary text-white shadow-md"
                     : "rounded-bl-sm bg-white border border-agro-accent/20 text-agro-text"

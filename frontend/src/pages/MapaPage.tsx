@@ -723,7 +723,7 @@ export default function MapaPage() {
       {/* Movimientos panel toggle button */}
       <button
         onClick={() => setMovimientosPanelOpen(!movimientosPanelOpen)}
-        className="absolute bottom-4 left-4 z-10 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg px-3 py-2 text-white text-sm flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-lg"
+        className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-10 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg px-3 py-2 text-white text-sm flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-lg"
         style={{ display: movimientosPanelOpen ? "none" : "flex" }}
       >
         <List className="w-4 h-4" />

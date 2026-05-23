@@ -180,7 +180,7 @@ export function ModalMovimiento() {
                 {filas.map((fila, i) => (
                   <div
                     key={fila.especie}
-                    className={`grid grid-cols-[20px_1fr_90px] items-center gap-2 rounded-md px-2.5 py-2 border transition-colors ${
+                    className={`flex items-center gap-2 rounded-md px-2.5 py-2 border transition-colors ${
                       fila.checked
                         ? "bg-slate-800 border-emerald-700/50"
                         : "bg-slate-800/40 border-slate-700/40 opacity-50"
@@ -192,8 +192,8 @@ export function ModalMovimiento() {
                       onChange={() => toggleFila(i)}
                       className="accent-emerald-500"
                     />
-                    <span className="text-white text-sm capitalize">{fila.especie}</span>
-                    <div className="flex items-center gap-1">
+                    <span className="text-white text-sm capitalize flex-1 min-w-0 truncate">{fila.especie}</span>
+                    <div className="flex items-center gap-1 shrink-0">
                       <input
                         type="number"
                         value={fila.cantidad}

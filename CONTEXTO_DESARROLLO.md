@@ -73,6 +73,16 @@ Pendiente de implementar.
   - MovimientosPanel: `w-[calc(100%-2rem)] max-w-xs sm:w-72` (antes `w-72`)
   - Auditoría completa en RESPONSIVE_AUDIT.md (18 ítems restantes)
 - Responsive parte 2 (overflow horizontal: filtros, tablas registros/flujo, resúmenes) — hecho (2026-05-23)
+- Responsive parte 3 (grids sin breakpoints, headers comprimidos, safe-area iOS, ModalMovimiento flex) — hecho (2026-05-23)
+  - PerfilPage: grid-cols-1 sm:grid-cols-2 para Nombre/Apellido
+  - ScoreSaludPage: grid-cols-2 md:grid-cols-3 lg:grid-cols-4 + p-3 sm:p-6
+  - CuadernoPage: header flex-col sm:flex-row + padding responsive + ModalTarea grid responsive
+  - ClientesPage / ProveedoresPage: p-3 sm:p-6 + header flex-col sm:flex-row
+  - AsistentePage: break-words + overflow-x-auto en burbujas de chat
+  - ModalMovimiento: cambio de grid a flex para fila de animales
+  - MapaPage botón flotante: bottom-[calc(1rem+env(safe-area-inset-bottom))]
+  - PuntosToolbar: bottom-[calc(2rem+env(safe-area-inset-bottom))]
+  - Auditoría completa: todos los 21 ítems marcados ✅
   - RegistrosFilters: w-full en mobile, sm:w-[original] en desktop; fechas side-by-side en mobile
   - RegistrosPage: p-3 sm:p-6, botones con flex-wrap
   - FlujoCajaPage: p-3 sm:p-6, columna Días oculta en mobile (hidden sm:table-cell)

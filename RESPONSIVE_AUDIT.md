@@ -47,7 +47,7 @@ className="... w-full sm:w-72 ..."
 
 ---
 
-### 4. ElementosPanel.tsx — Panel de elementos flotante
+### ✅ 4. ElementosPanel.tsx — Panel de elementos flotante
 **Archivo:** `frontend/src/components/mapa/ElementosPanel.tsx`
 **Qué rompe:** Ancho fijo `w-56` (224px) posicionado con `absolute`. En mobile puede solaparse con PanelLateral o PuntosToolbar, dejando el mapa inusable.
 **Fix sugerido:**
@@ -132,7 +132,7 @@ className="hidden sm:table-cell ..."
 
 ## MEDIO — grids que no colapsan correctamente
 
-### 10. PerfilPage.tsx — Grid 2 columnas sin breakpoint
+### ✅ 10. PerfilPage.tsx — Grid 2 columnas sin breakpoint
 **Archivo:** `frontend/src/pages/PerfilPage.tsx`
 **Qué rompe:** `grid grid-cols-2 gap-4` para los campos Nombre/Apellido. En 375px cada columna mide ~175px — alcanza pero los inputs quedan muy ajustados, especialmente con labels.
 **Fix sugerido:**
@@ -142,7 +142,7 @@ className="grid grid-cols-1 sm:grid-cols-2 gap-4"
 
 ---
 
-### 11. ScoreSaludPage.tsx — Grid que salta de 2 a 4 columnas
+### ✅ 11. ScoreSaludPage.tsx — Grid que salta de 2 a 4 columnas
 **Archivo:** `frontend/src/pages/ScoreSaludPage.tsx`
 **Qué rompe:** `grid-cols-2 xl:grid-cols-4` — en tablets (768-1280px) queda en 2 columnas (muy espaciado). No hay salto intermedio `md:grid-cols-3` o `lg:grid-cols-4`.
 **Fix sugerido:**
@@ -152,14 +152,14 @@ className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
 
 ---
 
-### 12. DashboardPage.tsx — KPI cards en mobile
+### ✅ 12. DashboardPage.tsx — KPI cards en mobile
 **Archivo:** `frontend/src/pages/DashboardPage.tsx`
 **Qué rompe:** Grid de KPIs usa `grid-cols-1 sm:grid-cols-2 xl:grid-cols-4`. En mobile (1 columna) ocupa mucho scroll vertical. Las cards de resumen por categoría y por mes pueden tener texto que se corta.
 **Fix sugerido:** El colapso a 1 columna está bien. Verificar que las cards tengan `truncate` en textos de nombres de categoría largos.
 
 ---
 
-### 13. FlujoCajaPage.tsx — KPI cards del ResumenTab
+### ✅ 13. FlujoCajaPage.tsx — KPI cards del ResumenTab
 **Archivo:** `frontend/src/pages/FlujoCajaPage.tsx:638`
 ```
 className="grid grid-cols-1 sm:grid-cols-3 gap-4"
@@ -172,7 +172,7 @@ className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
 
 ---
 
-### 14. CuadernoPage.tsx — Header con múltiples botones en mobile
+### ✅ 14. CuadernoPage.tsx — Header con múltiples botones en mobile
 **Archivo:** `frontend/src/pages/CuadernoPage.tsx`
 **Qué rompe:** La barra de acciones del cuaderno tiene botones en `flex` horizontal que en mobile se comprimen (texto se corta o desaparecen labels). La guía WhatsApp usa `grid-cols-3` que en mobile queda muy angosto.
 **Fix sugerido:**
@@ -185,7 +185,7 @@ className="grid grid-cols-1 sm:grid-cols-3 gap-4"
 
 ---
 
-### 15. ClientesPage.tsx / ProveedoresPage.tsx — Header + tabla
+### ✅ 15. ClientesPage.tsx / ProveedoresPage.tsx — Header + tabla
 **Archivo:** `frontend/src/pages/ClientesPage.tsx`, `frontend/src/pages/ProveedoresPage.tsx`
 **Qué rompe:** Header con `flex justify-between` comprime el título y el botón "Nuevo cliente/proveedor" en una sola línea. Las tablas de clientes/proveedores con columnas Email, Teléfono, Saldo debordan en mobile.
 **Fix sugerido:**
@@ -200,7 +200,7 @@ className="hidden sm:table-cell"
 
 ## BAJO — detalles de UX en mobile
 
-### 16. RegistrosPage.tsx — Botones de acción en header
+### ✅ 16. RegistrosPage.tsx — Botones de acción en header
 **Archivo:** `frontend/src/pages/RegistrosPage.tsx`
 **Qué rompe:** Los 4 botones (Exportar, Escanear factura, + Gasto, + Ingreso) en una línea horizontal se comprimen en mobile. "Escanear factura" puede quedar con texto cortado.
 **Fix sugerido:**
@@ -214,7 +214,7 @@ className="hidden sm:table-cell"
 
 ---
 
-### 17. AsistentePage.tsx — Burbujas de chat muy anchas
+### ✅ 17. AsistentePage.tsx — Burbujas de chat muy anchas
 **Archivo:** `frontend/src/pages/AsistentePage.tsx`
 **Qué rompe:** `max-w-[75%]` en mobile deja espacio adecuado pero en 375px los bloques de código en respuestas IA pueden hacer scroll horizontal dentro de la burbuja sin indicador visible.
 **Fix sugerido:**
@@ -226,7 +226,7 @@ className="... prose-pre:overflow-x-auto prose-pre:max-w-full"
 
 ---
 
-### 18. ModalMovimiento.tsx — Grid hardcodeado en modal
+### ✅ 18. ModalMovimiento.tsx — Grid hardcodeado en modal
 **Archivo:** `frontend/src/components/mapa/ModalMovimiento.tsx`
 **Qué rompe:** Usa `grid grid-cols-[20px_1fr_90px]` para las filas de animales. La columna fija de 90px (cantidad + unidad) puede ser muy ajustada en mobile si el texto del input es largo.
 **Fix sugerido:**
@@ -237,7 +237,7 @@ className="flex items-center gap-2 py-2 sm:grid sm:grid-cols-[20px_1fr_90px]"
 
 ---
 
-### 19. EscanearFacturaModal.tsx — Drop zone con padding excesivo
+### ✅ 19. EscanearFacturaModal.tsx — Drop zone con padding excesivo
 **Archivo:** `frontend/src/components/registros/EscanearFacturaModal.tsx`
 **Qué rompe:** `px-6 py-10` en la zona de drop hace que el modal sea muy alto en mobile, requiriendo scroll antes de ver los resultados extraídos.
 **Fix sugerido:**
@@ -247,7 +247,7 @@ className="... px-4 py-6 sm:px-6 sm:py-10 ..."
 
 ---
 
-### 20. MapaPage.tsx — Botón "Movimientos" con posición left-4 fixed
+### ✅ 20. MapaPage.tsx — Botón "Movimientos" con posición left-4 fixed
 **Archivo:** `frontend/src/pages/MapaPage.tsx:726`
 ```
 className="absolute bottom-4 left-4 z-10 ..."
@@ -261,7 +261,7 @@ className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-10 
 
 ---
 
-### 21. PuntosToolbar.tsx — Toolbar de puntos de interés
+### ✅ 21. PuntosToolbar.tsx — Toolbar de puntos de interés
 **Archivo:** `frontend/src/components/mapa/PuntosToolbar.tsx`
 **Qué rompe:** La toolbar flotante con botones de tipo de punto puede solaparse con el PanelLateral en mobile, dejando botones inaccesibles.
 **Fix sugerido:** Reposicionar en mobile para que no colisione con el panel lateral (que en mobile es full-width). Podría ir abajo centrado cuando no hay panel abierto.

@@ -75,7 +75,7 @@ export default function PerfilPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="rounded-xl border border-agro-accent/20 bg-white p-6 shadow-sm space-y-4">
           {/* Nombre */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-medium text-agro-muted uppercase tracking-wide">
                 Nombre

@@ -166,7 +166,7 @@ function ModalTarea({ open, onClose }: { open: boolean; onClose: () => void }) {
               onChange={(e) => setTexto(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Fecha planificada</Label>
               <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -444,8 +444,8 @@ export default function CuadernoPage() {
   return (
     <div className="page-fade flex flex-col h-full bg-agro-bg overflow-y-auto">
       {/* Header */}
-      <div className="bg-white border-b border-agro-accent/20 px-6 py-5">
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
+      <div className="bg-white border-b border-agro-accent/20 px-3 py-4 sm:px-6 sm:py-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between max-w-4xl mx-auto">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-agro-primary/10">
               <BookOpen className="h-5 w-5 text-agro-primary" />
@@ -467,7 +467,7 @@ export default function CuadernoPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-agro-accent/20 px-6">
+      <div className="bg-white border-b border-agro-accent/20 px-3 sm:px-6">
         <div className="flex gap-1 max-w-4xl mx-auto py-2">
           <button className={TAB_STYLE(tab === "notas")} onClick={() => setTab("notas")}>
             <StickyNote className="h-4 w-4" />
@@ -496,7 +496,7 @@ export default function CuadernoPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-6 py-6">
+      <div className="flex-1 px-3 py-4 sm:px-6 sm:py-6">
         <div className="max-w-4xl mx-auto space-y-3">
 
           {/* Guía WhatsApp */}

@@ -125,7 +125,7 @@ function PageSkeleton() {
       <div className="flex justify-center">
         <Skeleton className="h-64 w-64 rounded-2xl" />
       </div>
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
       </div>
     </div>
@@ -146,7 +146,7 @@ export default function ScoreSaludPage() {
   const cfg = NIVEL_CONFIG[data.nivel];
 
   return (
-    <div className="p-6 space-y-6 page-fade">
+    <div className="p-3 sm:p-6 space-y-6 page-fade">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Activity className="h-6 w-6 text-agro-primary" />
@@ -180,7 +180,7 @@ export default function ScoreSaludPage() {
       </Card>
 
       {/* Indicators grid */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {(Object.keys(INDICADOR_ICONS) as (keyof typeof INDICADOR_ICONS)[]).map((key) => (
           <IndicadorCard key={key} name={key} data={data.detalle[key]} />
         ))}
