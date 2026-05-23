@@ -83,6 +83,7 @@ Pendiente de implementar.
   - MapaPage botón flotante: bottom-[calc(1rem+env(safe-area-inset-bottom))]
   - PuntosToolbar: bottom-[calc(2rem+env(safe-area-inset-bottom))]
   - Auditoría completa: todos los 21 ítems marcados ✅
+- Responsive: botón confirmar potrero movido arriba + PuntosToolbar despejado de la barra de Safari iOS
   - RegistrosFilters: w-full en mobile, sm:w-[original] en desktop; fechas side-by-side en mobile
   - RegistrosPage: p-3 sm:p-6, botones con flex-wrap
   - FlujoCajaPage: p-3 sm:p-6, columna Días oculta en mobile (hidden sm:table-cell)

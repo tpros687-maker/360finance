@@ -12,7 +12,7 @@ export function PuntosToolbar() {
   const { activePuntoTool, setActivePuntoTool } = useMapaStore();
 
   return (
-    <div className="absolute bottom-[calc(2rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-white/90 backdrop-blur border border-agro-accent/20 rounded-xl px-3 py-2 shadow-lg">
+    <div className="absolute bottom-[calc(5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-white/90 backdrop-blur border border-agro-accent/20 rounded-xl px-3 py-2 shadow-lg">
       <span className="text-agro-muted text-xs mr-2 whitespace-nowrap">Puntos:</span>
       {TOOLS.map((tool) => (
         <button
