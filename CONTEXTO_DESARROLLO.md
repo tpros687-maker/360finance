@@ -72,6 +72,11 @@ Pendiente de implementar.
   - PanelLateral mapa: `w-full sm:w-80` (antes `w-80`)
   - MovimientosPanel: `w-[calc(100%-2rem)] max-w-xs sm:w-72` (antes `w-72`)
   - Auditoría completa en RESPONSIVE_AUDIT.md (18 ítems restantes)
+- Responsive parte 2 (overflow horizontal: filtros, tablas registros/flujo, resúmenes) — hecho (2026-05-23)
+  - RegistrosFilters: w-full en mobile, sm:w-[original] en desktop; fechas side-by-side en mobile
+  - RegistrosPage: p-3 sm:p-6, botones con flex-wrap
+  - FlujoCajaPage: p-3 sm:p-6, columna Días oculta en mobile (hidden sm:table-cell)
+  - ResumenesMensualesPage: header flex-col sm:flex-row, px-3 sm:px-6
 
 ## Cómo retomar en nuevo chat
 Decile al asistente:

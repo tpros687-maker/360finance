@@ -325,8 +325,8 @@ export default function ResumenesMensualesPage() {
   return (
     <div className="page-fade flex flex-col h-full bg-agro-bg overflow-y-auto">
       {/* Header */}
-      <div className="bg-white border-b border-agro-accent/20 px-6 py-5">
-        <div className="flex items-center justify-between max-w-5xl mx-auto">
+      <div className="bg-white border-b border-agro-accent/20 px-3 py-4 sm:px-6 sm:py-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-agro-primary/10">
               <Calendar className="h-5 w-5 text-agro-primary" />
@@ -352,7 +352,7 @@ export default function ResumenesMensualesPage() {
         </div>
       </div>
 
-      <div className="flex-1 px-6 py-6">
+      <div className="flex-1 px-3 py-4 sm:px-6 sm:py-6">
         <div className="max-w-5xl mx-auto">
 
           {isLoading && (

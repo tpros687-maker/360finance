@@ -63,7 +63,7 @@ export default function RegistrosPage() {
   }
 
   return (
-    <div className="page-fade flex flex-col h-full p-6 gap-4">
+    <div className="page-fade flex flex-col h-full p-3 sm:p-6 gap-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -71,7 +71,7 @@ export default function RegistrosPage() {
           <p className="text-agro-muted text-sm mt-0.5">Historial de movimientos financieros</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           {/* Export dropdown */}
           <div className="relative" ref={exportRef}>
             <Button

@@ -28,7 +28,7 @@ export function RegistrosFilters() {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* Search */}
-      <div className="relative min-w-[200px] flex-1 max-w-xs">
+      <div className="relative w-full sm:min-w-[200px] sm:flex-1 sm:max-w-xs">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
         <Input
           placeholder="Buscar descripción..."
@@ -44,7 +44,7 @@ export function RegistrosFilters() {
         onChange={(e) =>
           setFilters({ tipo: (e.target.value as TipoMovimiento) || undefined, categoria_id: undefined })
         }
-        className="w-36"
+        className="w-full sm:w-36"
       >
         <option value="">Todos los tipos</option>
         <option value="gasto">Gastos</option>
@@ -55,7 +55,7 @@ export function RegistrosFilters() {
       <Select
         value={filters.categoria_id ?? ""}
         onChange={(e) => setFilters({ categoria_id: e.target.value ? Number(e.target.value) : undefined })}
-        className="w-48"
+        className="w-full sm:w-48"
       >
         <option value="">Todas las categorías</option>
         {tipoFiltradas.map((c) => (
@@ -72,7 +72,7 @@ export function RegistrosFilters() {
           onChange={(e) =>
             setFilters({ potrero_id: e.target.value ? Number(e.target.value) : undefined })
           }
-          className="w-44"
+          className="w-full sm:w-44"
         >
           <option value="">Todos los potreros</option>
           {potreros.map((p) => (
@@ -83,23 +83,23 @@ export function RegistrosFilters() {
         </Select>
       )}
 
-      {/* Fecha desde */}
-      <Input
-        type="date"
-        value={filters.fecha_desde ?? ""}
-        onChange={(e) => setFilters({ fecha_desde: e.target.value || undefined })}
-        className="w-40"
-        title="Desde"
-      />
-
-      {/* Fecha hasta */}
-      <Input
-        type="date"
-        value={filters.fecha_hasta ?? ""}
-        onChange={(e) => setFilters({ fecha_hasta: e.target.value || undefined })}
-        className="w-40"
-        title="Hasta"
-      />
+      {/* Fechas — lado a lado en mobile, sueltas en desktop */}
+      <div className="flex gap-2 w-full sm:w-auto sm:contents">
+        <Input
+          type="date"
+          value={filters.fecha_desde ?? ""}
+          onChange={(e) => setFilters({ fecha_desde: e.target.value || undefined })}
+          className="flex-1 min-w-0 sm:w-40 sm:flex-none"
+          title="Desde"
+        />
+        <Input
+          type="date"
+          value={filters.fecha_hasta ?? ""}
+          onChange={(e) => setFilters({ fecha_hasta: e.target.value || undefined })}
+          className="flex-1 min-w-0 sm:w-40 sm:flex-none"
+          title="Hasta"
+        />
+      </div>
 
       {/* Clear */}
       {hasActiveFilters && (

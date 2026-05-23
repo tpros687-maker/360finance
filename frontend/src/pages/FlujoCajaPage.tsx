@@ -127,7 +127,7 @@ function PendingTable({ items, tipo }: { items: ItemFlujo[]; tipo: "cobro" | "pa
             <th className="text-left text-agro-muted font-medium px-3 py-2 hidden sm:table-cell">Descripción</th>
             <th className="text-right text-agro-muted font-medium px-3 py-2">Monto</th>
             <th className="text-right text-agro-muted font-medium px-3 py-2">Vencimiento</th>
-            <th className="text-right text-agro-muted font-medium px-3 py-2">Días</th>
+            <th className="text-right text-agro-muted font-medium px-3 py-2 hidden sm:table-cell">Días</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-agro-accent/10">
@@ -137,7 +137,7 @@ function PendingTable({ items, tipo }: { items: ItemFlujo[]; tipo: "cobro" | "pa
               <td className="px-3 py-2.5 text-agro-muted hidden sm:table-cell truncate max-w-[180px]">{item.descripcion ?? "—"}</td>
               <td className="px-3 py-2.5 text-right font-medium text-agro-text">{fmt(item.monto, item.moneda ?? moneda)}</td>
               <td className="px-3 py-2.5 text-right text-agro-muted">{fmtFecha(item.fecha_vencimiento)}</td>
-              <td className="px-3 py-2.5 text-right"><Diasbadge dias={item.dias_restantes} tipo={tipo} /></td>
+              <td className="px-3 py-2.5 text-right hidden sm:table-cell"><Diasbadge dias={item.dias_restantes} tipo={tipo} /></td>
             </tr>
           ))}
         </tbody>
@@ -846,7 +846,7 @@ export default function FlujoCajaPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6 page-fade">
+    <div className="p-3 sm:p-6 space-y-6 page-fade">
       <div>
         <h1 className="text-2xl font-bold text-agro-text">Flujo de Caja</h1>
         <p className="text-agro-muted text-sm mt-1">Cobros, pagos y gestión de clientes y proveedores.</p>

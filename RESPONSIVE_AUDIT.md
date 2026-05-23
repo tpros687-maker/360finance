@@ -60,7 +60,7 @@ className="... w-48 sm:w-56 ..."
 
 ## ALTO — tablas y filtros que desbordan horizontalmente
 
-### 5. RegistrosFilters.tsx — Filtros con anchos fijos que desbordan
+### ✅ 5. RegistrosFilters.tsx — Filtros con anchos fijos que desbordan
 **Archivo:** `frontend/src/components/registros/RegistrosFilters.tsx`
 **Qué rompe:** Todos los controles de filtro tienen anchos fijos sin breakpoint responsive:
 - Búsqueda: `min-w-[200px]` — más ancho que la pantalla si hay otros elementos
@@ -85,7 +85,7 @@ className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2"
 
 ---
 
-### 6. RegistrosTable.tsx — Tabla sin gestión de overflow en mobile
+### ✅ 6. RegistrosTable.tsx — Tabla sin gestión de overflow en mobile
 **Archivo:** `frontend/src/components/registros/RegistrosTable.tsx:79`
 ```
 <div className="flex-1 overflow-auto rounded-xl border border-slate-700/60">
@@ -102,7 +102,7 @@ className="hidden sm:table-cell ..."
 
 ---
 
-### 7. FlujoCajaPage.tsx — Tablas de cobros/pagos pendientes sin collapse mobile
+### ✅ 7. FlujoCajaPage.tsx — Tablas de cobros/pagos pendientes sin collapse mobile
 **Archivo:** `frontend/src/pages/FlujoCajaPage.tsx` (componente `PendingTable`)
 **Qué rompe:** La tabla de cobros/pagos pendientes tiene columnas `Cliente`, `Vence`, `Días`, `Monto` en horizontal. En mobile (375px) las columnas de texto largo se cortan o desbordan.
 **Fix sugerido:**
@@ -116,14 +116,14 @@ className="hidden sm:table-cell ..."
 
 ---
 
-### 8. FlujoCajaPage.tsx — CobrosTab y PagosTab: tablas de CRUD
+### ✅ 8. FlujoCajaPage.tsx — CobrosTab y PagosTab: tablas de CRUD
 **Archivo:** `frontend/src/pages/FlujoCajaPage.tsx` (componentes `CobrosTab` / `PagosTab`)
 **Qué rompe:** Las tablas de gestión de cobros y pagos tienen columnas `Cliente/Proveedor`, `Concepto`, `Vence`, `Monto`, `Estado`, `Acciones`. En mobile las columnas de fecha y texto se solapan.
 **Fix sugerido:** Mismo patrón — ocultar columnas secundarias con `hidden sm:table-cell` o usar layout de tarjeta en mobile.
 
 ---
 
-### 9. ResumenesMensualesPage.tsx — Layout master/detail en mobile
+### ✅ 9. ResumenesMensualesPage.tsx — Layout master/detail en mobile
 **Archivo:** `frontend/src/pages/ResumenesMensualesPage.tsx`
 **Qué rompe:** El layout usa una lista lateral + panel de detalle en desktop. En mobile ambos paneles se apilan, pero el panel de detalle puede aparecer antes de que el usuario seleccione un mes, mostrando un estado vacío confuso.
 **Fix sugerido:** En mobile, mostrar solo la lista y navegar al detalle como pantalla completa (o usar tabs para alternar).
