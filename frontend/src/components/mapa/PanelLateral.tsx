@@ -466,7 +466,7 @@ export function PanelLateral() {
   if (!panelOpen || !potrero) return null;
 
   return (
-    <div className="absolute top-0 right-0 h-full w-80 bg-white border-l border-agro-accent/20 flex flex-col z-10 overflow-hidden">
+    <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white border-l border-agro-accent/20 flex flex-col z-10 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-agro-accent/20 flex-shrink-0">
         <h2 className="text-agro-text font-semibold text-sm truncate">{potrero.nombre || "Nuevo potrero"}</h2>

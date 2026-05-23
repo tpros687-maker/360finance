@@ -62,7 +62,7 @@ export function MovimientosPanel() {
   const programados = movimientos.filter((m) => m.estado === "programado");
 
   return (
-    <div className="absolute bottom-16 left-4 z-10 w-72 bg-white/95 backdrop-blur border border-agro-accent/20 rounded-xl shadow-xl overflow-hidden">
+    <div className="absolute bottom-16 left-4 z-10 w-[calc(100%-2rem)] max-w-xs sm:w-72 bg-white/95 backdrop-blur border border-agro-accent/20 rounded-xl shadow-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-agro-accent/20">
         <button

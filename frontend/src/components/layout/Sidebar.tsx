@@ -127,7 +127,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Alertas panel */}
       {panelOpen && (
-        <div className="fixed left-64 top-0 h-screen w-80 z-50 flex flex-col bg-white border-l border-agro-accent/20 shadow-2xl">
+        <div className="fixed inset-y-0 left-0 w-full z-50 flex flex-col bg-white border-l border-agro-accent/20 shadow-2xl lg:left-64 lg:w-80">
           {/* Panel header */}
           <div className="flex items-center justify-between px-4 py-4 border-b border-agro-accent/20 shrink-0">
             <div>
