@@ -95,6 +95,7 @@ Pendiente de implementar.
 - Pagos parte 2 — recibo de pago por email al aprobarse — hecho (2026-05-24).
   send_recibo_pago() en email.py; se llama post-commit solo si es_nuevo y approved.
 - Pagos parte 3 — renovación automática (MercadoPago preapproval/Suscripciones) + recibo en cada cobro — hecho (2026-05-24).
+- Pagos parte 4 — recordatorios de vencimiento por email (job diario 10:00, avisa a 3 y 1 días, solo planes sin renovación automática) — hecho (2026-05-24).
   PENDIENTE: probar en sandbox MP (verificar nombres de campos en /authorized_payments).
   - POST /pagos/crear-suscripcion: crea preapproval y guarda suscripcion_id en user.
   - webhook rutea por topic: payment | subscription_preapproval | subscription_authorized_payment.

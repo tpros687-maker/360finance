@@ -11,6 +11,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.services.cotizacion import actualizar_cotizacion_hoy
 from app.services.notificaciones import enviar_notificaciones_tareas, enviar_resumen_diario, generar_resumenes_mensuales
+from app.services.suscripciones import enviar_recordatorios_vencimiento
 from app.routers.auth import router as auth_router
 from app.routers.categorias import router as categorias_router
 from app.routers.registros import router as registros_router
@@ -55,6 +56,14 @@ async def _job_resumen_mensual() -> None:
             pass
 
 
+async def _job_recordatorios_vencimiento() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            await enviar_recordatorios_vencimiento(db)
+        except Exception:
+            pass
+
+
 _scheduler = AsyncIOScheduler()
 
 
@@ -83,6 +92,12 @@ async def lifespan(app: FastAPI):
         _job_resumen_mensual,
         CronTrigger(day=1, hour=9, minute=0, timezone="America/Montevideo"),
         id="resumen_mensual",
+        replace_existing=True,
+    )
+    _scheduler.add_job(
+        _job_recordatorios_vencimiento,
+        CronTrigger(hour=10, minute=0, timezone="America/Montevideo"),
+        id="recordatorios_vencimiento",
         replace_existing=True,
     )
     _scheduler.start()
