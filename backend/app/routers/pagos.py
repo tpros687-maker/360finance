@@ -131,7 +131,8 @@ async def webhook(
     existing = await db.execute(
         select(PagoHistorial).where(PagoHistorial.mp_payment_id == str(payment_id))
     )
-    if existing.scalar_one_or_none() is None:
+    es_nuevo = existing.scalar_one_or_none() is None
+    if es_nuevo:
         db.add(
             PagoHistorial(
                 user_id=user_id,
@@ -147,6 +148,19 @@ async def webhook(
         user.trial_fin = datetime.utcnow() + timedelta(days=PLAN_DURACION_DIAS)
 
     await db.commit()
+
+    if es_nuevo and mp_status == "approved":
+        from app.services.email import send_recibo_pago
+        await send_recibo_pago(
+            to=user.email,
+            nombre=user.nombre,
+            monto=transaction_amount,
+            moneda=currency,
+            payment_id=str(payment_id),
+            fecha=datetime.utcnow(),
+            vencimiento=user.trial_fin,
+        )
+
     return {"status": "ok"}
 
 

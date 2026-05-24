@@ -92,6 +92,8 @@ Pendiente de implementar.
 ## Pagos / Email
 - Pagos parte 1 — infra de email (Resend) + fix bugs pagos.py — hecho (2026-05-24).
   Falta setear RESEND_API_KEY en Railway.
+- Pagos parte 2 — recibo de pago por email al aprobarse — hecho (2026-05-24).
+  send_recibo_pago() en email.py; se llama post-commit solo si es_nuevo y approved.
   - `backend/app/services/email.py`: `send_email(to, subject, html, text?)` — async, nunca propaga excepción
   - `backend/app/config.py`: settings `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`
   - `backend/app/routers/pagos.py`: fix `PRECIO_USD` → `PRECIO_UYU` y default moneda `"USD"` → `"UYU"`
