@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Leaf, CheckCircle2, Clock, Loader2, CreditCard } from "lucide-react";
+import { Leaf, CheckCircle2, Clock, Loader2, CreditCard, RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
-import { api } from "@/lib/axios";
+import { crearPreferencia, crearSuscripcion } from "@/lib/pagosApi";
 
 const FEATURES_BASE = [
   "Registros de gastos e ingresos",
@@ -20,8 +20,10 @@ const FEATURES_CAMPO = [
 
 export default function PagoPage() {
   const user = useAuthStore((s) => s.user);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingAuto, setLoadingAuto] = useState(false);
+  const [loadingManual, setLoadingManual] = useState(false);
+  const [errorAuto, setErrorAuto] = useState<string | null>(null);
+  const [errorManual, setErrorManual] = useState<string | null>(null);
 
   const features = user?.es_productor
     ? [...FEATURES_BASE, ...FEATURES_CAMPO]
@@ -32,15 +34,29 @@ export default function PagoPage() {
       ? user.dias_restantes
       : null;
 
-  async function handleSuscribir() {
-    setLoading(true);
-    setError(null);
+  const anyLoading = loadingAuto || loadingManual;
+
+  async function handleSuscripcionAuto() {
+    setLoadingAuto(true);
+    setErrorAuto(null);
     try {
-      const { data } = await api.post<{ init_point: string }>("/pagos/crear-preferencia");
-      window.location.href = data.init_point;
+      const { init_point } = await crearSuscripcion();
+      window.location.href = init_point;
     } catch {
-      setError("No se pudo iniciar el proceso de pago. Intentá de nuevo.");
-      setLoading(false);
+      setErrorAuto("No se pudo iniciar la suscripción automática. Intentá de nuevo.");
+      setLoadingAuto(false);
+    }
+  }
+
+  async function handlePagoManual() {
+    setLoadingManual(true);
+    setErrorManual(null);
+    try {
+      const { init_point } = await crearPreferencia();
+      window.location.href = init_point;
+    } catch {
+      setErrorManual("No se pudo iniciar el proceso de pago. Intentá de nuevo.");
+      setLoadingManual(false);
     }
   }
 
@@ -76,10 +92,10 @@ export default function PagoPage() {
           {/* Price */}
           <div className="mb-6 text-center">
             <p className="text-4xl font-bold text-agro-text">
-              $7{" "}
-              <span className="text-lg font-normal text-agro-muted">USD / mes</span>
+              UYU $280{" "}
+              <span className="text-lg font-normal text-agro-muted">por mes</span>
             </p>
-            <p className="mt-1 text-xs text-agro-muted">Facturación mensual · Cancelá cuando quieras</p>
+            <p className="mt-1 text-xs text-agro-muted">Pago seguro procesado por MercadoPago</p>
           </div>
 
           {/* Divider */}
@@ -95,35 +111,76 @@ export default function PagoPage() {
             ))}
           </ul>
 
-          {/* Error */}
-          {error && (
-            <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 border border-red-200">
-              {error}
+          {/* Divider */}
+          <div className="mb-5 border-t border-agro-accent/15" />
+
+          {/* Opción 1 — Renovación automática (recomendada) */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-semibold text-agro-text">Renovación automática</span>
+              <span className="rounded-full bg-agro-primary/10 px-2 py-0.5 text-[11px] font-semibold text-agro-primary">
+                Recomendado
+              </span>
+            </div>
+            <p className="text-xs text-agro-muted mb-2.5">
+              Se cobra automáticamente cada mes. Cancelás cuando quieras.
             </p>
-          )}
-
-          {/* CTA */}
-          <button
-            onClick={handleSuscribir}
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-agro-primary py-3 text-sm font-semibold text-white transition-colors hover:bg-agro-primary/90 disabled:opacity-60"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Procesando…
-              </>
-            ) : (
-              <>
-                <CreditCard className="h-4 w-4" />
-                Suscribirme con MercadoPago
-              </>
+            {errorAuto && (
+              <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 border border-red-200">
+                {errorAuto}
+              </p>
             )}
-          </button>
+            <button
+              onClick={handleSuscripcionAuto}
+              disabled={anyLoading}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-agro-primary py-3 text-sm font-semibold text-white transition-colors hover:bg-agro-primary/90 disabled:opacity-60"
+            >
+              {loadingAuto ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Procesando…
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  Suscribirme (automático)
+                </>
+              )}
+            </button>
+          </div>
 
-          <p className="mt-4 text-center text-xs text-agro-muted">
-            Pago seguro procesado por MercadoPago
-          </p>
+          {/* Opción 2 — Pago manual */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-semibold text-agro-text">Pagar un mes (manual)</span>
+            </div>
+            <p className="text-xs text-agro-muted mb-2.5">
+              Pagás un mes. Te avisamos por email antes de que venza para que renueves.
+            </p>
+            {errorManual && (
+              <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 border border-red-200">
+                {errorManual}
+              </p>
+            )}
+            <button
+              onClick={handlePagoManual}
+              disabled={anyLoading}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-agro-accent/30 bg-white py-3 text-sm font-semibold text-agro-text transition-colors hover:bg-agro-bg disabled:opacity-60"
+            >
+              {loadingManual ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Procesando…
+                </>
+              ) : (
+                <>
+                  <CreditCard className="h-4 w-4" />
+                  Pagar un mes
+                </>
+              )}
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

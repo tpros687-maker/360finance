@@ -306,7 +306,6 @@ export function PanelLateral() {
   const tieneSuplementacion = watch("tiene_suplementacion");
   const tieneFranjas = watch("tiene_franjas");
   const diasPorFranja = watch("dias_por_franja");
-  const franjasUsadas = watch("franjas_usadas");
 
   useQuery({
     queryKey: ["animales", selectedPotreroId],
@@ -611,7 +610,7 @@ export function PanelLateral() {
                     </div>
                   </div>
                   {/* Grid de estado de franjas */}
-                  {potrero && <FranjasGrid potreroId={potrero.id} diasPorFranjaDefault={diasPorFranja} qc={qc} />}
+                  {potrero && <FranjasGrid potreroId={potrero.id} diasPorFranjaDefault={diasPorFranja ?? undefined} qc={qc} />}
                 </>
               )}
             </div>

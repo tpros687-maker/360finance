@@ -74,8 +74,6 @@ export function RegistroModal({ open, onClose, registro, defaultTipo = "gasto" }
 
   const tipo = watch("tipo");
   const moneda = watch("moneda");
-  const categoriaId = watch("categoria_id");
-  const fecha = watch("fecha");
 
 
   useEffect(() => {

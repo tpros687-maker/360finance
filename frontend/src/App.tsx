@@ -64,6 +64,7 @@ function AppRoutes() {
         {/* Semi-public: layout when authenticated, bare page otherwise */}
         <Route element={<OptionalLayout />}>
           <Route path="/pago" element={<PagoPage />} />
+          <Route path="/planes" element={<PagoPage />} />
         </Route>
 
         {/* Protected */}

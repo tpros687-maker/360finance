@@ -24,3 +24,8 @@ export async function crearPreferencia(): Promise<{ init_point: string }> {
   const res = await api.post<{ init_point: string }>("/pagos/crear-preferencia");
   return res.data;
 }
+
+export async function crearSuscripcion(): Promise<{ init_point: string }> {
+  const res = await api.post<{ init_point: string }>("/pagos/crear-suscripcion");
+  return res.data;
+}

@@ -137,7 +137,7 @@ function buildFranjaStrips(potreros: Potrero[], franjasByPotrero: Map<number, Fr
       };
 
       // Clip strip to potrero shape
-      const clipped = turfIntersect({ type: "FeatureCollection", features: [potreroFeature, stripFeature] });
+      const clipped = turfIntersect(potreroFeature, stripFeature);
       if (!clipped) return;
 
       const centerLng = (x0 + x1) / 2;

@@ -1,12 +1,17 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 
-function TrialBanner({ dias }: { dias: number }) {
+function TrialBanner({ dias, fechaVenc }: { dias: number; fechaVenc: string | null }) {
+  const fechaStr = fechaVenc
+    ? new Date(fechaVenc).toLocaleDateString("es-UY")
+    : null;
+
   return (
     <div className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2.5 text-sm text-white">
       <span className="font-medium">
-        Tu período de prueba vence en {dias} {dias === 1 ? "día" : "días"}.{" "}
-        Suscribite para continuar.
+        Tu plan vence en {dias} {dias === 1 ? "día" : "días"}
+        {fechaStr ? ` (el ${fechaStr})` : ""}.{" "}
+        Renová para continuar.
       </span>
       <a
         href="/pago"
@@ -34,14 +39,17 @@ export function ProtectedRoute() {
   }
 
   const showTrialBanner =
-    user?.plan === "trial" &&
-    user.dias_restantes !== null &&
-    user.dias_restantes !== undefined &&
-    user.dias_restantes <= 3;
+    user != null &&
+    user.dias_restantes != null &&
+    user.dias_restantes <= 3 &&
+    !user.vencido &&
+    (user.plan === "trial" || (user.plan === "activo" && user.suscripcion_id == null));
 
   return (
     <>
-      {showTrialBanner && <TrialBanner dias={user!.dias_restantes!} />}
+      {showTrialBanner && (
+        <TrialBanner dias={user.dias_restantes!} fechaVenc={user.trial_fin} />
+      )}
       <Outlet />
     </>
   );
