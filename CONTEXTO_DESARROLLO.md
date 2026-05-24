@@ -89,6 +89,13 @@ Pendiente de implementar.
   - FlujoCajaPage: p-3 sm:p-6, columna Días oculta en mobile (hidden sm:table-cell)
   - ResumenesMensualesPage: header flex-col sm:flex-row, px-3 sm:px-6
 
+## Pagos / Email
+- Pagos parte 1 — infra de email (Resend) + fix bugs pagos.py — hecho (2026-05-24).
+  Falta setear RESEND_API_KEY en Railway.
+  - `backend/app/services/email.py`: `send_email(to, subject, html, text?)` — async, nunca propaga excepción
+  - `backend/app/config.py`: settings `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`
+  - `backend/app/routers/pagos.py`: fix `PRECIO_USD` → `PRECIO_UYU` y default moneda `"USD"` → `"UYU"`
+
 ## Cómo retomar en nuevo chat
 Decile al asistente:
 > "Continuamos el desarrollo de 360 Agro Finance. Lee el archivo CONTEXTO_DESARROLLO.md

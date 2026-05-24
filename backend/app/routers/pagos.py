@@ -111,8 +111,8 @@ async def webhook(
     payment = result["response"]
     mp_status = payment.get("status")
     external_ref = payment.get("external_reference")
-    transaction_amount = float(payment.get("transaction_amount", PRECIO_USD))
-    currency = payment.get("currency_id", "USD")
+    transaction_amount = float(payment.get("transaction_amount", PRECIO_UYU))
+    currency = payment.get("currency_id", "UYU")
 
     if not external_ref:
         return {"status": "ignored"}

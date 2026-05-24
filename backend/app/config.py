@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     META_VERIFY_TOKEN: str = "whatsapp-verify-360"
     MP_ACCESS_TOKEN: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "360 Agro Finance <no-reply@360rural.com>"
+    EMAIL_REPLY_TO: str = ""
 
     @property
     def cors_origins_list(self) -> List[str]:
