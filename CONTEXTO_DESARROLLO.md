@@ -94,6 +94,11 @@ Pendiente de implementar.
   Falta setear RESEND_API_KEY en Railway.
 - Pagos parte 2 — recibo de pago por email al aprobarse — hecho (2026-05-24).
   send_recibo_pago() en email.py; se llama post-commit solo si es_nuevo y approved.
+- Pagos parte 3 — renovación automática (MercadoPago preapproval/Suscripciones) + recibo en cada cobro — hecho (2026-05-24).
+  PENDIENTE: probar en sandbox MP (verificar nombres de campos en /authorized_payments).
+  - POST /pagos/crear-suscripcion: crea preapproval y guarda suscripcion_id en user.
+  - webhook rutea por topic: payment | subscription_preapproval | subscription_authorized_payment.
+  - _extender_plan(): extiende trial_fin desde max(now, trial_fin) + 30 días.
   - `backend/app/services/email.py`: `send_email(to, subject, html, text?)` — async, nunca propaga excepción
   - `backend/app/config.py`: settings `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`
   - `backend/app/routers/pagos.py`: fix `PRECIO_USD` → `PRECIO_UYU` y default moneda `"USD"` → `"UYU"`
