@@ -714,6 +714,8 @@ export default function MapaPage() {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            setIsDrawing(false);
+            setDrawnPoints(0);
             drawRef.current?.changeMode("simple_select");
           }}
           className="absolute top-[calc(0.75rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-30 bg-agro-primary text-white font-semibold py-3 px-8 rounded-full shadow-xl hover:bg-agro-primary/90 active:scale-95 transition-all text-base"
