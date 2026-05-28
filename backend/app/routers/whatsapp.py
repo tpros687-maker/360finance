@@ -526,10 +526,12 @@ def _cmd_ayuda() -> str:
 # ── Helpers movimiento de ganado ─────────────────────────────────────────────
 
 _MAPA_ESPECIE: dict[str, str] = {
-    "bovino": "bovino", "novillo": "bovino", "novillos": "bovino",
-    "vaca": "bovino", "vacas": "bovino", "toro": "bovino", "toros": "bovino",
-    "ternero": "bovino", "terneros": "bovino", "ternera": "bovino", "terneras": "bovino",
-    "vaquillona": "bovino", "vaquillonas": "bovino",
+    "bovino": "bovino",
+    "novillo": "novillo", "novillos": "novillo",
+    "vaquillona": "vaquillona", "vaquillonas": "vaquillona",
+    "ternero": "ternero", "terneros": "ternero", "ternera": "ternero", "terneras": "ternero",
+    "vaca": "vaca", "vacas": "vaca",
+    "toro": "toro", "toros": "toro",
     "ovino": "ovino", "oveja": "ovino", "ovejas": "ovino",
     "cordero": "ovino", "corderos": "ovino", "borrego": "ovino",
     "equino": "equino", "caballo": "equino", "caballos": "equino",
@@ -558,7 +560,7 @@ def _parse_especie_cantidad(texto: str) -> tuple[int, str, str] | None:
 
 
 def _parse_multiples_especies(texto: str) -> list[tuple[int, str, str]]:
-    """'30 vaquillonas, 20 terneros' → [(30, 'bovino', 'vaquillonas'), ...]."""
+    """'30 vaquillonas, 20 terneros' → [(30, 'vaquillona', 'vaquillonas'), (20, 'ternero', 'terneros')]."""
     partes = re.split(r'[,y]', texto)
     resultados = []
     for parte in partes:
