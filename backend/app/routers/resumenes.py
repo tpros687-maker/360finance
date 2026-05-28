@@ -61,15 +61,12 @@ async def generar_resumen(
 ):
     """
     Genera (o regenera) el resumen del mes indicado.
-    Si no se pasa year/month, usa el mes anterior al actual.
+    Si no se pasa year/month, usa el mes actual.
     """
     hoy = date.today()
     if year is None or month is None:
-        primer_dia = hoy.replace(day=1)
-        from datetime import timedelta
-        ultimo_mes = primer_dia - timedelta(days=1)
-        year = year or ultimo_mes.year
-        month = month or ultimo_mes.month
+        year = year or hoy.year
+        month = month or hoy.month
 
     if not (1 <= month <= 12):
         raise HTTPException(status_code=400, detail="Mes inválido (1-12)")
