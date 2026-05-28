@@ -289,13 +289,13 @@ async def get_flujo_caja(
 
         cobros_sem = sum(
             c.monto for c in cobros
-            if c.fecha_vencimiento is not None
-            and sem_inicio <= c.fecha_vencimiento.date() <= sem_fin
+            if (w == 0 and (c.fecha_vencimiento is None or c.vencido))
+            or (c.fecha_vencimiento is not None and sem_inicio <= c.fecha_vencimiento.date() <= sem_fin)
         )
         pagos_sem = sum(
             p.monto for p in pagos
-            if p.fecha_vencimiento is not None
-            and sem_inicio <= p.fecha_vencimiento.date() <= sem_fin
+            if (w == 0 and (p.fecha_vencimiento is None or p.vencido))
+            or (p.fecha_vencimiento is not None and sem_inicio <= p.fecha_vencimiento.date() <= sem_fin)
         )
         balance_sem = cobros_sem - pagos_sem
         balance_acum += balance_sem
