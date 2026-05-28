@@ -1,38 +1,36 @@
-"""Servicio de envío de email vía Resend. Cambiar proveedor: solo tocar este módulo."""
-import asyncio
+"""Servicio de envío de email vía MailerLite. Cambiar proveedor: solo tocar este módulo."""
 import logging
 from datetime import date, datetime
 from typing import Union
+
+import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-
-def _send_email_sync(to: str, subject: str, html: str, text: str | None = None) -> None:
-    if not settings.RESEND_API_KEY:
-        logger.warning("Resend no configurado — saltando email a %s", to)
-        return
-    import resend  # importación diferida para no fallar si el paquete no está instalado
-    resend.api_key = settings.RESEND_API_KEY
-    params: dict = {
-        "from": settings.EMAIL_FROM,
-        "to": [to],
-        "subject": subject,
-        "html": html,
-    }
-    if text:
-        params["text"] = text
-    if settings.EMAIL_REPLY_TO:
-        params["reply_to"] = settings.EMAIL_REPLY_TO
-    resend.Emails.send(params)
+_MAILERLITE_URL = "https://connect.mailerlite.com/api/emails"
 
 
 async def send_email(to: str, subject: str, html: str, text: str | None = None) -> bool:
-    """Envía un email sin bloquear el event loop. Nunca propaga excepción."""
-    loop = asyncio.get_event_loop()
+    """Envía un email vía MailerLite. Nunca propaga excepción."""
+    if not settings.MAILERLITE_API_KEY:
+        logger.warning("MailerLite no configurado — saltando email a %s", to)
+        return False
+    payload: dict = {
+        "from": {"email": settings.EMAIL_FROM},
+        "to": [{"email": to}],
+        "subject": subject,
+        "html": html,
+    }
     try:
-        await loop.run_in_executor(None, _send_email_sync, to, subject, html, text)
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                _MAILERLITE_URL,
+                json=payload,
+                headers={"Authorization": f"Bearer {settings.MAILERLITE_API_KEY}"},
+            )
+            resp.raise_for_status()
         logger.info("Email enviado a %s — %s", to, subject)
         return True
     except Exception:
