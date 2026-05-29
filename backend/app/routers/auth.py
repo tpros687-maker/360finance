@@ -49,6 +49,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
         token_verificacion=token_ver,
     )
     db.add(user)
+    user.email_verificado = True  # TEMP: quitar cuando el email esté funcionando
     await db.commit()
     await db.refresh(user)
     verify_url = f"https://finance.360rural.com/verificar-email?token={token_ver}"
