@@ -1,36 +1,38 @@
-"""Servicio de envío de email vía Brevo. Cambiar proveedor: solo tocar este módulo."""
+"""Servicio de envío de email vía Gmail SMTP. Cambiar proveedor: solo tocar este módulo."""
 import logging
 from datetime import date, datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Union
 
-import httpx
+import aiosmtplib
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_BREVO_URL = "https://api.brevo.com/v3/smtp/email"
-
 
 async def send_email(to: str, subject: str, html: str, text: str | None = None) -> bool:
-    """Envía un email vía Brevo. Nunca propaga excepción."""
-    if not settings.BREVO_API_KEY:
-        logger.warning("Brevo no configurado — saltando email a %s", to)
+    """Envía un email vía Gmail SMTP. Nunca propaga excepción."""
+    if not settings.GMAIL_APP_PASSWORD:
+        logger.warning("Gmail no configurado — saltando email a %s", to)
         return False
-    payload: dict = {
-        "sender": {"email": settings.EMAIL_FROM},
-        "to": [{"email": to}],
-        "subject": subject,
-        "htmlContent": html,
-    }
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to
+    if text:
+        msg.attach(MIMEText(text, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                _BREVO_URL,
-                json=payload,
-                headers={"api-key": settings.BREVO_API_KEY},
-            )
-            resp.raise_for_status()
+        await aiosmtplib.send(
+            msg,
+            hostname="smtp.gmail.com",
+            port=587,
+            start_tls=True,
+            username=settings.EMAIL_FROM,
+            password=settings.GMAIL_APP_PASSWORD,
+        )
         logger.info("Email enviado a %s — %s", to, subject)
         return True
     except Exception:

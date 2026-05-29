@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     META_VERIFY_TOKEN: str = "whatsapp-verify-360"
     MP_ACCESS_TOKEN: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
-    BREVO_API_KEY: str = ""
+    GMAIL_APP_PASSWORD: str = ""
     EMAIL_FROM: str = "no-reply@360rural.com"
     EMAIL_REPLY_TO: str = ""
 
