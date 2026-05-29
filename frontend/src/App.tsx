@@ -27,6 +27,7 @@ const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
 const CuadernoPage = lazy(() => import("@/pages/CuadernoPage"));
 const ResumenesMensualesPage = lazy(() => import("@/pages/ResumenesMensualesPage"));
 const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
+const VerificarEmailPage = lazy(() => import("@/pages/VerificarEmailPage"));
 
 function OptionalLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -60,6 +61,7 @@ function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/sso" element={<SSOPage />} />
+        <Route path="/verificar-email" element={<VerificarEmailPage />} />
 
         {/* Semi-public: layout when authenticated, bare page otherwise */}
         <Route element={<OptionalLayout />}>
