@@ -35,6 +35,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El email ya está registrado")
 
     ahora = datetime.utcnow()
+    token_ver = secrets.token_urlsafe(32)
     user = User(
         email=payload.email,
         nombre=payload.nombre,
@@ -44,14 +45,21 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
         plan="trial",
         trial_inicio=ahora,
         trial_fin=ahora + timedelta(days=30),
+        email_verificado=False,
+        token_verificacion=token_ver,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    verify_url = f"https://finance.360rural.com/verificar-email?token={token_ver}"
     await send_email(
         to=user.email,
         subject="Bienvenido a 360 Agro Finance",
-        html=f"<p>Hola {user.nombre}, tu cuenta fue creada con éxito.</p>",
+        html=(
+            f"<p>Hola {user.nombre}, tu cuenta fue creada con éxito.</p>"
+            f"<p>Para activarla, verificá tu email haciendo clic en el siguiente enlace:</p>"
+            f'<p><a href="{verify_url}">{verify_url}</a></p>'
+        ),
     )
     return user
 
@@ -67,10 +75,28 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
             detail="Credenciales incorrectas",
         )
 
+    if not user.email_verificado:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verificá tu email antes de ingresar",
+        )
+
     return TokenPair(
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
     )
+
+
+@router.get("/verificar-email")
+async def verificar_email(token: str, db: AsyncSession = Depends(get_db)) -> dict:
+    result = await db.execute(select(User).where(User.token_verificacion == token))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token inválido o ya utilizado")
+    user.email_verificado = True
+    user.token_verificacion = None
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/refresh", response_model=TokenPair)
