@@ -1,4 +1,4 @@
-"""Servicio de envío de email vía MailerLite. Cambiar proveedor: solo tocar este módulo."""
+"""Servicio de envío de email vía Brevo. Cambiar proveedor: solo tocar este módulo."""
 import logging
 from datetime import date, datetime
 from typing import Union
@@ -9,26 +9,26 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_MAILERLITE_URL = "https://connect.mailerlite.com/api/emails"
+_BREVO_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 async def send_email(to: str, subject: str, html: str, text: str | None = None) -> bool:
-    """Envía un email vía MailerLite. Nunca propaga excepción."""
-    if not settings.MAILERLITE_API_KEY:
-        logger.warning("MailerLite no configurado — saltando email a %s", to)
+    """Envía un email vía Brevo. Nunca propaga excepción."""
+    if not settings.BREVO_API_KEY:
+        logger.warning("Brevo no configurado — saltando email a %s", to)
         return False
     payload: dict = {
-        "from": {"email": settings.EMAIL_FROM},
+        "sender": {"email": settings.EMAIL_FROM},
         "to": [{"email": to}],
         "subject": subject,
-        "html": html,
+        "htmlContent": html,
     }
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
-                _MAILERLITE_URL,
+                _BREVO_URL,
                 json=payload,
-                headers={"Authorization": f"Bearer {settings.MAILERLITE_API_KEY}"},
+                headers={"api-key": settings.BREVO_API_KEY},
             )
             resp.raise_for_status()
         logger.info("Email enviado a %s — %s", to, subject)
