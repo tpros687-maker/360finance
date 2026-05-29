@@ -1,5 +1,8 @@
+import logging
 import secrets
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError, jwt as jose_jwt
@@ -52,6 +55,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
     user.email_verificado = True  # TEMP: quitar cuando el email esté funcionando
     await db.commit()
     await db.refresh(user)
+    logger.info("BREVO_API_KEY presente: %s", bool(settings.BREVO_API_KEY))
     verify_url = f"https://finance.360rural.com/verificar-email?token={token_ver}"
     await send_email(
         to=user.email,
