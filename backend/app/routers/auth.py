@@ -16,6 +16,7 @@ from app.auth.jwt import (
 )
 from app.config import settings
 from app.database import get_db
+from app.services.email import send_email
 from app.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import LoginRequest, OnboardingRequest, PlanRead, ProfileUpdate, RefreshRequest, TokenPair, UserCreate, UserRead
@@ -47,6 +48,11 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    await send_email(
+        to=user.email,
+        subject="Bienvenido a 360 Agro Finance",
+        html=f"<p>Hola {user.nombre}, tu cuenta fue creada con éxito.</p>",
+    )
     return user
 
 
