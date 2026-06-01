@@ -1,10 +1,13 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
-import { User, Save } from "lucide-react";
+import { User, Save, Lock } from "lucide-react";
 import { updateProfile, parseApiError } from "@/lib/authApi";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/hooks/useToast";
+import { api } from "@/lib/axios";
 
 interface FormValues {
   nombre: string;
@@ -12,6 +15,19 @@ interface FormValues {
   email: string;
   telefono: string;
 }
+
+const pwSchema = z
+  .object({
+    password_actual: z.string().min(1, "Ingresá tu contraseña actual"),
+    password_nueva: z.string().min(8, "Mínimo 8 caracteres"),
+    confirm: z.string(),
+  })
+  .refine((d) => d.password_nueva === d.confirm, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirm"],
+  });
+
+type PwFormValues = z.infer<typeof pwSchema>;
 
 export default function PerfilPage() {
   const { user, setUser } = useAuthStore();
@@ -58,6 +74,28 @@ export default function PerfilPage() {
   });
 
   const onSubmit = (data: FormValues) => mutation.mutate(data);
+
+  const {
+    register: registerPw,
+    handleSubmit: handleSubmitPw,
+    reset: resetPw,
+    formState: { errors: errorsPw },
+  } = useForm<PwFormValues>({ resolver: zodResolver(pwSchema) });
+
+  const pwMutation = useMutation({
+    mutationFn: (data: PwFormValues) =>
+      api.put("/auth/cambiar-password", {
+        password_actual: data.password_actual,
+        password_nueva: data.password_nueva,
+      }),
+    onSuccess: () => {
+      resetPw();
+      toast({ title: "Contraseña actualizada" });
+    },
+    onError: (err) => {
+      toast({ title: parseApiError(err), variant: "destructive" });
+    },
+  });
 
   return (
     <div className="mx-auto max-w-lg py-8 px-4">
@@ -144,6 +182,69 @@ export default function PerfilPage() {
         >
           <Save className="h-4 w-4" />
           {mutation.isPending ? "Guardando..." : "Guardar cambios"}
+        </button>
+      </form>
+
+      {/* Cambiar contraseña */}
+      <form onSubmit={handleSubmitPw((d) => pwMutation.mutate(d))} className="mt-6 space-y-4">
+        <div className="rounded-xl border border-agro-accent/20 bg-white p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Lock className="h-4 w-4 text-agro-muted" />
+            <p className="text-xs font-medium text-agro-muted uppercase tracking-wide">Cambiar contraseña</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-agro-muted uppercase tracking-wide">
+              Contraseña actual
+            </label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              {...registerPw("password_actual")}
+              className="w-full rounded-lg border border-agro-accent/30 px-3 py-2 text-sm text-agro-text outline-none focus:border-agro-primary focus:ring-1 focus:ring-agro-primary/30"
+            />
+            {errorsPw.password_actual && (
+              <p className="text-xs text-red-500">{errorsPw.password_actual.message}</p>
+            )}
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-agro-muted uppercase tracking-wide">
+              Nueva contraseña
+            </label>
+            <input
+              type="password"
+              placeholder="Mínimo 8 caracteres"
+              autoComplete="new-password"
+              {...registerPw("password_nueva")}
+              className="w-full rounded-lg border border-agro-accent/30 px-3 py-2 text-sm text-agro-text outline-none focus:border-agro-primary focus:ring-1 focus:ring-agro-primary/30"
+            />
+            {errorsPw.password_nueva && (
+              <p className="text-xs text-red-500">{errorsPw.password_nueva.message}</p>
+            )}
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-agro-muted uppercase tracking-wide">
+              Confirmar nueva contraseña
+            </label>
+            <input
+              type="password"
+              placeholder="Repetí tu nueva contraseña"
+              autoComplete="new-password"
+              {...registerPw("confirm")}
+              className="w-full rounded-lg border border-agro-accent/30 px-3 py-2 text-sm text-agro-text outline-none focus:border-agro-primary focus:ring-1 focus:ring-agro-primary/30"
+            />
+            {errorsPw.confirm && (
+              <p className="text-xs text-red-500">{errorsPw.confirm.message}</p>
+            )}
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={pwMutation.isPending}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-agro-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-agro-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Lock className="h-4 w-4" />
+          {pwMutation.isPending ? "Guardando..." : "Cambiar contraseña"}
         </button>
       </form>
 
