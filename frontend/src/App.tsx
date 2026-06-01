@@ -28,6 +28,8 @@ const CuadernoPage = lazy(() => import("@/pages/CuadernoPage"));
 const ResumenesMensualesPage = lazy(() => import("@/pages/ResumenesMensualesPage"));
 const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
 const VerificarEmailPage = lazy(() => import("@/pages/VerificarEmailPage"));
+const OlvidePasswordPage = lazy(() => import("@/pages/OlvidePasswordPage"));
+const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
 
 function OptionalLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -62,6 +64,8 @@ function AppRoutes() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/sso" element={<SSOPage />} />
         <Route path="/verificar-email" element={<VerificarEmailPage />} />
+        <Route path="/olvide-password" element={<OlvidePasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Semi-public: layout when authenticated, bare page otherwise */}
         <Route element={<OptionalLayout />}>

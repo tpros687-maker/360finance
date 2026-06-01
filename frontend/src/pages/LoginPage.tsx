@@ -105,6 +105,11 @@ export default function LoginPage() {
                 Registrate
               </Link>
             </p>
+            <p className="mt-2 text-center text-sm text-slate-400">
+              <Link to="/olvide-password" className="text-slate-500 hover:text-brand-400 hover:underline transition-colors">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </p>
           </CardContent>
         </Card>
       </div>
