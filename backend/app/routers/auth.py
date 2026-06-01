@@ -240,3 +240,79 @@ async def sso_login(body: SSORequest, db: AsyncSession = Depends(get_db)) -> Tok
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
     )
+
+
+class CambiarPasswordRequest(BaseModel):
+    password_actual: str
+    password_nueva: str
+
+
+class RecuperarPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password_nueva: str
+
+
+@router.put("/cambiar-password")
+async def cambiar_password(
+    body: CambiarPasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if not verify_password(body.password_actual, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contraseña actual incorrecta")
+    current_user.hashed_password = hash_password(body.password_nueva)
+    await db.commit()
+    await send_email(
+        to=current_user.email,
+        subject="Tu contraseña fue cambiada — 360 Agro Finance",
+        html=(
+            f"<p>Hola {current_user.nombre},</p>"
+            "<p>Tu contraseña fue cambiada exitosamente.</p>"
+            "<p>Si no fuiste vos, contactanos de inmediato.</p>"
+        ),
+    )
+    return {"ok": True}
+
+
+@router.post("/recuperar-password")
+async def recuperar_password(
+    body: RecuperarPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+    if user is not None:
+        token = secrets.token_urlsafe(32)
+        user.token_reset_password = token
+        await db.commit()
+        reset_url = f"https://finance.360rural.com/reset-password?token={token}"
+        await send_email(
+            to=user.email,
+            subject="Recuperación de contraseña — 360 Agro Finance",
+            html=(
+                f"<p>Hola {user.nombre},</p>"
+                "<p>Recibimos una solicitud para restablecer tu contraseña.</p>"
+                f'<p><a href="{reset_url}">Hacer clic aquí para crear una nueva contraseña</a></p>'
+                "<p>Si no solicitaste esto, podés ignorar este email.</p>"
+            ),
+        )
+    return {"ok": True}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(select(User).where(User.token_reset_password == body.token))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token inválido o ya utilizado")
+    user.hashed_password = hash_password(body.password_nueva)
+    user.token_reset_password = None
+    await db.commit()
+    return {"ok": True}

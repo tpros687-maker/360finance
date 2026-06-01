@@ -32,6 +32,7 @@ class User(Base):
     suscripcion_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     email_verificado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     token_verificacion: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    token_reset_password: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
