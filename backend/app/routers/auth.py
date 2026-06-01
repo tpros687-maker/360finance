@@ -52,7 +52,6 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
         token_verificacion=token_ver,
     )
     db.add(user)
-    user.email_verificado = True  # TEMP: quitar cuando el email esté funcionando
     await db.commit()
     await db.refresh(user)
     logger.info("RESEND_API_KEY presente: %s", bool(settings.RESEND_API_KEY))
