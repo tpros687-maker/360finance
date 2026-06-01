@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
     apellido: str
     password: str
     perfil: str = "productor"
+    telefono: Optional[str] = None
 
     @field_validator("password")
     @classmethod

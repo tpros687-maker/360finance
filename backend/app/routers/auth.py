@@ -50,6 +50,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
         trial_fin=ahora + timedelta(days=30),
         email_verificado=False,
         token_verificacion=token_ver,
+        telefono=payload.telefono or None,
     )
     db.add(user)
     await db.commit()
