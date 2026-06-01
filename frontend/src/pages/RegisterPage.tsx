@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,8 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuthStore } from "@/store/authStore";
-import { register as registerUser, login, getMe, parseApiError } from "@/lib/authApi";
+import { register as registerUser, parseApiError } from "@/lib/authApi";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +37,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { setTokens, setUser } = useAuthStore();
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
   const {
     register,
@@ -47,16 +47,16 @@ export default function RegisterPage() {
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { perfil: "productor" } });
 
   const mutation = useMutation({
-    mutationFn: async (data: FormValues) => {
-      await registerUser({ email: data.email, nombre: data.nombre, apellido: data.apellido, password: data.password, perfil: data.perfil });
-      const tokens = await login({ email: data.email, password: data.password });
-      setTokens(tokens.access_token, tokens.refresh_token);
-      const user = await getMe();
-      setUser(user);
-    },
-    onSuccess: () => {
-      toast({ title: "Cuenta creada", description: "Bienvenido a 360 Agro Finance" });
-      navigate("/dashboard");
+    mutationFn: (data: FormValues) =>
+      registerUser({
+        email: data.email,
+        nombre: data.nombre,
+        apellido: data.apellido,
+        password: data.password,
+        perfil: data.perfil,
+      }),
+    onSuccess: (_, variables) => {
+      setRegisteredEmail(variables.email);
     },
     onError: (err) => {
       toast({ title: "Error al registrarse", description: parseApiError(err), variant: "destructive" });
@@ -75,78 +75,95 @@ export default function RegisterPage() {
           </h1>
         </div>
 
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle>Crear cuenta</CardTitle>
-            <CardDescription>Completá tus datos para registrarte</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="nombre">Nombre</Label>
-                  <Input id="nombre" placeholder="Juan" {...register("nombre")} />
-                  {errors.nombre && <p className="text-xs text-red-400">{errors.nombre.message}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="apellido">Apellido</Label>
-                  <Input id="apellido" placeholder="Pérez" {...register("apellido")} />
-                  {errors.apellido && <p className="text-xs text-red-400">{errors.apellido.message}</p>}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="tu@email.com" autoComplete="email" {...register("email")} />
-                {errors.email && <p className="text-xs text-red-400">{errors.email.message}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="password">Contraseña</Label>
-                <Input id="password" type="password" placeholder="Mínimo 8 caracteres" autoComplete="new-password" {...register("password")} />
-                {errors.password && <p className="text-xs text-red-400">{errors.password.message}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="confirm">Confirmar contraseña</Label>
-                <Input id="confirm" type="password" placeholder="Repetí tu contraseña" autoComplete="new-password" {...register("confirm")} />
-                {errors.confirm && <p className="text-xs text-red-400">{errors.confirm.message}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Tipo de usuario</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {PERFILES.map(({ value, label }) => (
-                    <label
-                      key={value}
-                      className={cn(
-                        "flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
-                        watch("perfil") === value
-                          ? "border-brand-500 bg-brand-500/10 text-brand-400"
-                          : "border-slate-700 text-slate-400 hover:border-slate-500"
-                      )}
-                    >
-                      <input type="radio" value={value} {...register("perfil")} className="sr-only" />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <Button type="submit" className="w-full" disabled={mutation.isPending}>
-                {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Crear cuenta
+        {registeredEmail ? (
+          <Card>
+            <CardContent className="pt-8 pb-8 text-center space-y-4">
+              <p className="text-4xl">✉️</p>
+              <CardTitle className="text-xl">Revisá tu email</CardTitle>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Te enviamos un link de verificación a{" "}
+                <span className="text-slate-200 font-medium">{registeredEmail}</span>.
+                Hacé clic en el link para activar tu cuenta.
+              </p>
+              <Button className="w-full mt-2" onClick={() => navigate("/login")}>
+                Ir al login
               </Button>
-            </form>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="space-y-1">
+              <CardTitle>Crear cuenta</CardTitle>
+              <CardDescription>Completá tus datos para registrarte</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="nombre">Nombre</Label>
+                    <Input id="nombre" placeholder="Juan" {...register("nombre")} />
+                    {errors.nombre && <p className="text-xs text-red-400">{errors.nombre.message}</p>}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="apellido">Apellido</Label>
+                    <Input id="apellido" placeholder="Pérez" {...register("apellido")} />
+                    {errors.apellido && <p className="text-xs text-red-400">{errors.apellido.message}</p>}
+                  </div>
+                </div>
 
-            <p className="mt-4 text-center text-sm text-slate-400">
-              ¿Ya tenés cuenta?{" "}
-              <Link to="/login" className="text-brand-400 hover:underline font-medium">
-                Iniciá sesión
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" placeholder="tu@email.com" autoComplete="email" {...register("email")} />
+                  {errors.email && <p className="text-xs text-red-400">{errors.email.message}</p>}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="password">Contraseña</Label>
+                  <Input id="password" type="password" placeholder="Mínimo 8 caracteres" autoComplete="new-password" {...register("password")} />
+                  {errors.password && <p className="text-xs text-red-400">{errors.password.message}</p>}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirm">Confirmar contraseña</Label>
+                  <Input id="confirm" type="password" placeholder="Repetí tu contraseña" autoComplete="new-password" {...register("confirm")} />
+                  {errors.confirm && <p className="text-xs text-red-400">{errors.confirm.message}</p>}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Tipo de usuario</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {PERFILES.map(({ value, label }) => (
+                      <label
+                        key={value}
+                        className={cn(
+                          "flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
+                          watch("perfil") === value
+                            ? "border-brand-500 bg-brand-500/10 text-brand-400"
+                            : "border-slate-700 text-slate-400 hover:border-slate-500"
+                        )}
+                      >
+                        <input type="radio" value={value} {...register("perfil")} className="sr-only" />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full" disabled={mutation.isPending}>
+                  {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Crear cuenta
+                </Button>
+              </form>
+
+              <p className="mt-4 text-center text-sm text-slate-400">
+                ¿Ya tenés cuenta?{" "}
+                <Link to="/login" className="text-brand-400 hover:underline font-medium">
+                  Iniciá sesión
+                </Link>
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
