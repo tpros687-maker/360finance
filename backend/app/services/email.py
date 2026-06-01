@@ -1,38 +1,36 @@
-"""Servicio de envío de email vía Gmail SMTP. Cambiar proveedor: solo tocar este módulo."""
+"""Servicio de envío de email vía Resend. Cambiar proveedor: solo tocar este módulo."""
 import logging
 from datetime import date, datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Union
 
-import aiosmtplib
+import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_RESEND_URL = "https://api.resend.com/emails"
+
 
 async def send_email(to: str, subject: str, html: str, text: str | None = None) -> bool:
-    """Envía un email vía Gmail SMTP. Nunca propaga excepción."""
-    if not settings.GMAIL_APP_PASSWORD:
-        logger.warning("Gmail no configurado — saltando email a %s", to)
+    """Envía un email vía Resend. Nunca propaga excepción."""
+    if not settings.RESEND_API_KEY:
+        logger.warning("Resend no configurado — saltando email a %s", to)
         return False
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = to
-    if text:
-        msg.attach(MIMEText(text, "plain", "utf-8"))
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    payload: dict = {
+        "from": settings.EMAIL_FROM,
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    }
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname="smtp.gmail.com",
-            port=465,
-            use_tls=True,
-            username=settings.EMAIL_FROM,
-            password=settings.GMAIL_APP_PASSWORD,
-        )
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                _RESEND_URL,
+                json=payload,
+                headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+            )
+            resp.raise_for_status()
         logger.info("Email enviado a %s — %s", to, subject)
         return True
     except Exception:
