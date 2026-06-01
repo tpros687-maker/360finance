@@ -24,6 +24,7 @@ const schema = z
     nombre: z.string().min(1, "Ingresá tu nombre"),
     apellido: z.string().min(1, "Ingresá tu apellido"),
     email: z.string().email("Email inválido"),
+    telefono: z.string().optional(),
     password: z.string().min(8, "Mínimo 8 caracteres"),
     confirm: z.string(),
     perfil: z.enum(["productor", "negocio"]).default("productor"),
@@ -54,6 +55,7 @@ export default function RegisterPage() {
         apellido: data.apellido,
         password: data.password,
         perfil: data.perfil,
+        telefono: data.telefono || undefined,
       }),
     onSuccess: (_, variables) => {
       setRegisteredEmail(variables.email);
@@ -115,6 +117,11 @@ export default function RegisterPage() {
                   <Label htmlFor="email">Email</Label>
                   <Input id="email" type="email" placeholder="tu@email.com" autoComplete="email" {...register("email")} />
                   {errors.email && <p className="text-xs text-red-400">{errors.email.message}</p>}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="telefono">Teléfono WhatsApp <span className="text-slate-500 font-normal">(opcional)</span></Label>
+                  <Input id="telefono" type="tel" placeholder="+598 99 000 000" autoComplete="tel" {...register("telefono")} />
                 </div>
 
                 <div className="space-y-1.5">
