@@ -19,7 +19,7 @@ from app.auth.jwt import (
 )
 from app.config import settings
 from app.database import get_db
-from app.services.email import send_email
+from app.services.email import send_email, send_email_bienvenida, send_email_cambio_password, send_email_recuperar_password
 from app.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import LoginRequest, OnboardingRequest, PlanRead, ProfileUpdate, RefreshRequest, TokenPair, UserCreate, UserRead
@@ -56,15 +56,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
     await db.refresh(user)
     logger.info("RESEND_API_KEY presente: %s", bool(settings.RESEND_API_KEY))
     verify_url = f"https://finance.360rural.com/verificar-email?token={token_ver}"
-    await send_email(
-        to=user.email,
-        subject="Bienvenido a 360 Agro Finance",
-        html=(
-            f"<p>Hola {user.nombre}, tu cuenta fue creada con éxito.</p>"
-            f"<p>Para activarla, verificá tu email haciendo clic en el siguiente enlace:</p>"
-            f'<p><a href="{verify_url}">{verify_url}</a></p>'
-        ),
-    )
+    await send_email_bienvenida(to=user.email, nombre=user.nombre, verify_url=verify_url)
     return user
 
 
@@ -266,15 +258,8 @@ async def cambiar_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contraseña actual incorrecta")
     current_user.hashed_password = hash_password(body.password_nueva)
     await db.commit()
-    await send_email(
-        to=current_user.email,
-        subject="Tu contraseña fue cambiada — 360 Agro Finance",
-        html=(
-            f"<p>Hola {current_user.nombre},</p>"
-            "<p>Tu contraseña fue cambiada exitosamente.</p>"
-            "<p>Si no fuiste vos, contactanos de inmediato.</p>"
-        ),
-    )
+    fecha_hora = datetime.utcnow().strftime("%d/%m/%Y a las %H:%M UTC")
+    await send_email_cambio_password(to=current_user.email, nombre=current_user.nombre, fecha_hora=fecha_hora)
     return {"ok": True}
 
 
@@ -290,16 +275,7 @@ async def recuperar_password(
         user.token_reset_password = token
         await db.commit()
         reset_url = f"https://finance.360rural.com/reset-password?token={token}"
-        await send_email(
-            to=user.email,
-            subject="Recuperación de contraseña — 360 Agro Finance",
-            html=(
-                f"<p>Hola {user.nombre},</p>"
-                "<p>Recibimos una solicitud para restablecer tu contraseña.</p>"
-                f'<p><a href="{reset_url}">Hacer clic aquí para crear una nueva contraseña</a></p>'
-                "<p>Si no solicitaste esto, podés ignorar este email.</p>"
-            ),
-        )
+        await send_email_recuperar_password(to=user.email, nombre=user.nombre, reset_url=reset_url)
     return {"ok": True}
 
 
