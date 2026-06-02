@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
 
-PRECIO_UYU = 50.0
+PRECIO_UYU = 280.0
 PLAN_DURACION_DIAS = 30
 
 
