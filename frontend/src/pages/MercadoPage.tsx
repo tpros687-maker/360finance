@@ -91,62 +91,139 @@ function AlertaBadge({ n }: { n: number }) {
 // ── Gráfico de proyección ─────────────────────────────────────────────────────
 
 function GraficoProyeccion({ cat, color }: { cat: CategoriaMercado; color: string }) {
-  const data = cat.proyeccion.map((p) => ({
+  // Combinar histórico + proyección en un solo dataset
+  const histData = cat.historico.map((h) => ({
+    mes: fmtMes(h.mes),
+    historico: h.precio,
+    estimado: undefined as number | undefined,
+    minimo: undefined as number | undefined,
+    maximo: undefined as number | undefined,
+    esFuturo: false,
+  }));
+
+  const proyData = cat.proyeccion.map((p) => ({
     mes: fmtMes(p.mes),
+    historico: undefined as number | undefined,
     estimado: p.estimado,
     minimo: p.minimo,
     maximo: p.maximo,
+    esFuturo: true,
   }));
 
-  const yDomain = (): [number, number] => {
-    const vals = cat.proyeccion.flatMap((p) => [p.minimo, p.maximo]);
-    const mn = Math.min(...vals, cat.alerta_baja) * 0.95;
-    const mx = Math.max(...vals, cat.alerta_alta) * 1.05;
-    return [parseFloat(mn.toFixed(2)), parseFloat(mx.toFixed(2))];
-  };
+  // Conectar el último punto histórico con el primero de proyección
+  if (histData.length > 0 && proyData.length > 0) {
+    proyData[0] = {
+      ...proyData[0],
+      historico: histData[histData.length - 1].historico,
+    };
+  }
+
+  const data = [...histData, ...proyData];
+
+  const allVals = [
+    ...cat.historico.map((h) => h.precio),
+    ...cat.proyeccion.flatMap((p) => [p.minimo, p.maximo]),
+    cat.alerta_alta,
+    cat.alerta_baja,
+  ];
+  const yMin = Math.min(...allVals) * 0.93;
+  const yMax = Math.max(...allVals) * 1.07;
+
+  // Mostrar solo algunos ticks en el eje X para no saturar
+  const totalPuntos = data.length;
+  const tickInterval = Math.ceil(totalPuntos / 6);
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id={`grad-${cat.id}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor={color} stopOpacity={0.25} />
-            <stop offset="95%" stopColor={color} stopOpacity={0.03} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="mes" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
-        <YAxis
-          tick={{ fontSize: 10, fill: "#9ca3af" }}
-          tickLine={false}
-          axisLine={false}
-          domain={yDomain()}
-          tickFormatter={(v) => cat.unidad === "kg" ? v.toFixed(2) : v.toFixed(0)}
-        />
-        <Tooltip
-          formatter={(v: number) => [fmtPrecio(v, cat.unidad), ""]}
-          labelStyle={{ fontWeight: 600, color: "#1f2937" }}
-          contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
-        />
-        <ReferenceLine y={cat.alerta_alta} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.2}
-          label={{ value: "Alerta alta", position: "insideTopRight", fontSize: 9, fill: "#ef4444" }} />
-        <ReferenceLine y={cat.alerta_baja} stroke="#3b82f6" strokeDasharray="4 2" strokeWidth={1.2}
-          label={{ value: "Alerta baja", position: "insideBottomRight", fontSize: 9, fill: "#3b82f6" }} />
-        {/* Banda de confianza */}
-        <Area type="monotone" dataKey="maximo" stroke="none" fill={`url(#grad-${cat.id})`} />
-        <Area type="monotone" dataKey="minimo" stroke="none" fill="white" />
-        {/* Línea central */}
-        <Area
-          type="monotone"
-          dataKey="estimado"
-          stroke={color}
-          strokeWidth={2.5}
-          fill="none"
-          dot={false}
-          activeDot={{ r: 4, fill: color }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div>
+      {/* Leyenda manual */}
+      <div className="flex flex-wrap gap-3 mb-2 text-[10px] text-agro-muted">
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-5 h-0.5" style={{ background: color }} /> Precio real
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-5 h-0.5 bg-orange-400" /> Proyección IA
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-5 h-px border-t-2 border-dashed border-red-400" /> Alerta alta ({cat.unidad === "kg" ? cat.alerta_alta.toFixed(2) : cat.alerta_alta.toFixed(0)})
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-5 h-px border-t-2 border-dashed border-blue-400" /> Alerta baja ({cat.unidad === "kg" ? cat.alerta_baja.toFixed(2) : cat.alerta_baja.toFixed(0)})
+        </span>
+      </div>
+
+      <ResponsiveContainer width="100%" height={200}>
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={`grad-hist-${cat.id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={color} stopOpacity={0.15} />
+              <stop offset="95%" stopColor={color} stopOpacity={0.02} />
+            </linearGradient>
+            <linearGradient id={`grad-proy-${cat.id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor="#f97316" stopOpacity={0.20} />
+              <stop offset="95%" stopColor="#f97316" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+          <XAxis
+            dataKey="mes"
+            tick={{ fontSize: 9, fill: "#9ca3af" }}
+            tickLine={false}
+            axisLine={false}
+            interval={tickInterval - 1}
+          />
+          <YAxis
+            tick={{ fontSize: 9, fill: "#9ca3af" }}
+            tickLine={false}
+            axisLine={false}
+            domain={[parseFloat(yMin.toFixed(2)), parseFloat(yMax.toFixed(2))]}
+            tickFormatter={(v) => cat.unidad === "kg" ? v.toFixed(2) : v.toFixed(0)}
+            width={40}
+          />
+          <Tooltip
+            formatter={(v: number, name: string) => {
+              const labels: Record<string, string> = {
+                historico: "Real",
+                estimado: "Proyectado",
+                maximo: "Máximo",
+                minimo: "Mínimo",
+              };
+              return [fmtPrecio(v, cat.unidad), labels[name] ?? name];
+            }}
+            labelStyle={{ fontWeight: 600, color: "#1f2937", marginBottom: 4 }}
+            contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 11 }}
+          />
+          {/* Líneas de alerta — sin label para evitar superposición */}
+          <ReferenceLine y={cat.alerta_alta} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.2} />
+          <ReferenceLine y={cat.alerta_baja} stroke="#3b82f6" strokeDasharray="4 2" strokeWidth={1.2} />
+          {/* Banda de confianza proyección */}
+          <Area type="monotone" dataKey="maximo" stroke="none" fill={`url(#grad-proy-${cat.id})`} connectNulls />
+          <Area type="monotone" dataKey="minimo" stroke="none" fill="white" connectNulls />
+          {/* Precio histórico */}
+          <Area
+            type="monotone"
+            dataKey="historico"
+            stroke={color}
+            strokeWidth={2}
+            fill={`url(#grad-hist-${cat.id})`}
+            dot={false}
+            activeDot={{ r: 3, fill: color }}
+            connectNulls
+          />
+          {/* Proyección */}
+          <Area
+            type="monotone"
+            dataKey="estimado"
+            stroke="#f97316"
+            strokeWidth={2}
+            strokeDasharray="5 3"
+            fill="none"
+            dot={false}
+            activeDot={{ r: 3, fill: "#f97316" }}
+            connectNulls
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 

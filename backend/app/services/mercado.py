@@ -226,6 +226,15 @@ def construir_cache() -> dict:
         prom_proy = float(pred["yhat"].mean()) if len(pred) else precio_actual
         tendencia = "sube" if prom_proy > precio_actual else ("baja" if prom_proy < precio_actual else "estable")
 
+        # Últimos 24 meses de datos históricos para el gráfico
+        historico = []
+        df_hist = df_s.tail(24)
+        for _, row in df_hist.iterrows():
+            historico.append({
+                "mes": row["ds"].strftime("%Y-%m"),
+                "precio": round(float(row["y"]), 3),
+            })
+
         resultado[col] = {
             **cfg,
             "id": col,
@@ -233,6 +242,7 @@ def construir_cache() -> dict:
             "fecha_ultimo_dato": fecha_ultimo_dato,
             "prom_proyectado": round(prom_proy, 3),
             "tendencia": tendencia,
+            "historico": historico,
             "proyeccion": proyeccion,
             "alertas": alertas,
         }

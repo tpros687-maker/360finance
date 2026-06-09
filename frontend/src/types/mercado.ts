@@ -16,6 +16,11 @@ export interface AlertaMercado {
   precio: number;
 }
 
+export interface HistoricoMes {
+  mes: string;
+  precio: number;
+}
+
 export interface CategoriaMercado {
   id: string;
   nombre: string;
@@ -28,6 +33,7 @@ export interface CategoriaMercado {
   fecha_ultimo_dato: string;
   prom_proyectado: number;
   tendencia: Tendencia;
+  historico: HistoricoMes[];
   proyeccion: ProyeccionMes[];
   alertas: AlertaMercado[];
 }
