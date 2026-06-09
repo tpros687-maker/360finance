@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -135,33 +136,10 @@ _cache_timestamp: Optional[datetime] = None
 DATA_PATH = Path(__file__).parent.parent / "data" / "dataset_completo_ganado.csv"
 
 
-def _entrenar_y_predecir(df_serie: pd.DataFrame) -> pd.DataFrame:
-    """Entrena Prophet con los últimos ANOS_HISTORIAL años y devuelve predicción."""
-    try:
-        from prophet import Prophet  # import tardío para no frenar el arranque si no está
-    except ImportError:
-        logger.warning("Prophet no instalado. Retornando predicción vacía.")
-        return pd.DataFrame()
-
-    import warnings
-    warnings.filterwarnings("ignore")
-
-    fecha_min = df_serie["ds"].max() - pd.DateOffset(years=ANOS_HISTORIAL)
-    df_train = df_serie[df_serie["ds"] >= fecha_min].copy().reset_index(drop=True)
-
-    modelo = Prophet(
-        yearly_seasonality=True,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        seasonality_mode="additive",
-        changepoint_prior_scale=0.05,
-        seasonality_prior_scale=10,
-        interval_width=0.90,
-    )
-    modelo.fit(df_train)
-    futuro = modelo.make_future_dataframe(periods=MESES_PROYECCION, freq="MS")
-    pred = modelo.predict(futuro)
-    return pred[pred["ds"] > df_serie["ds"].max()][["ds", "yhat", "yhat_lower", "yhat_upper"]]
+def _predecir_categoria(df: pd.DataFrame, col: str) -> dict:
+    """Usa el modelo ensemble ML para predecir una categoría."""
+    from app.services.mercado_ml import predecir_ensemble
+    return predecir_ensemble(df, col)
 
 
 def construir_cache() -> dict:
@@ -191,49 +169,31 @@ def construir_cache() -> dict:
             continue
 
         try:
-            pred = _entrenar_y_predecir(df_s)
+            ml_result = _predecir_categoria(df, col)
         except Exception as e:
             logger.warning("Mercado: error proyectando %s: %s", col, e)
             continue
 
-        precio_actual = float(df_s["y"].iloc[-1])
-        fecha_ultimo_dato = df_s["ds"].iloc[-1].strftime("%Y-%m")
+        if not ml_result:
+            continue
+
+        precio_actual = float(df[col].dropna().iloc[-1])
+        fecha_ultimo_dato = df["fecha"][df[col].notna()].iloc[-1].strftime("%Y-%m")
 
         proyeccion = []
         alertas = []
-        for _, row in pred.iterrows():
-            mes = row["ds"].strftime("%Y-%m")
-            yhat = float(row["yhat"])
-            ylo  = float(row["yhat_lower"])
-            yhi  = float(row["yhat_upper"])
-
+        for p in ml_result.get("proyeccion", []):
             tipo_alerta = None
-            if yhat >= cfg["alerta_alta"]:
+            if p["estimado"] >= cfg["alerta_alta"]:
                 tipo_alerta = "alta"
-                alertas.append({"mes": mes, "tipo": "alta", "precio": round(yhat, 3)})
-            elif yhat <= cfg["alerta_baja"]:
+                alertas.append({"mes": p["mes"], "tipo": "alta", "precio": p["estimado"]})
+            elif p["estimado"] <= cfg["alerta_baja"]:
                 tipo_alerta = "baja"
-                alertas.append({"mes": mes, "tipo": "baja", "precio": round(yhat, 3)})
+                alertas.append({"mes": p["mes"], "tipo": "baja", "precio": p["estimado"]})
+            proyeccion.append({**p, "alerta": tipo_alerta})
 
-            proyeccion.append({
-                "mes": mes,
-                "estimado": round(yhat, 3),
-                "minimo": round(ylo, 3),
-                "maximo": round(yhi, 3),
-                "alerta": tipo_alerta,
-            })
-
-        prom_proy = float(pred["yhat"].mean()) if len(pred) else precio_actual
+        prom_proy = float(np.mean([p["estimado"] for p in proyeccion])) if proyeccion else precio_actual
         tendencia = "sube" if prom_proy > precio_actual else ("baja" if prom_proy < precio_actual else "estable")
-
-        # Últimos 24 meses de datos históricos para el gráfico
-        historico = []
-        df_hist = df_s.tail(24)
-        for _, row in df_hist.iterrows():
-            historico.append({
-                "mes": row["ds"].strftime("%Y-%m"),
-                "precio": round(float(row["y"]), 3),
-            })
 
         resultado[col] = {
             **cfg,
@@ -242,9 +202,16 @@ def construir_cache() -> dict:
             "fecha_ultimo_dato": fecha_ultimo_dato,
             "prom_proyectado": round(prom_proy, 3),
             "tendencia": tendencia,
-            "historico": historico,
+            "historico": ml_result.get("historico", []),
             "proyeccion": proyeccion,
             "alertas": alertas,
+            "precision": {
+                "mape_modelo": ml_result.get("mape_ensemble"),
+                "mape_xgb": ml_result.get("mape_xgb"),
+                "mape_prophet": ml_result.get("mape_prophet"),
+                "peso_xgb": ml_result.get("peso_xgb"),
+                "peso_prophet": ml_result.get("peso_prophet"),
+            },
         }
 
     logger.info("Mercado: cache construido con %d categorías.", len(resultado))

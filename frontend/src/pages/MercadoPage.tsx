@@ -267,6 +267,18 @@ function TarjetaCategoria({ cat, color }: { cat: CategoriaMercado; color: string
         {/* Gráfico */}
         <GraficoProyeccion cat={cat} color={color} />
 
+        {/* Precisión del modelo */}
+        {cat.precision?.mape_modelo != null && (
+          <div className="flex items-center gap-2 text-[10px] text-agro-muted bg-agro-bg/60 rounded-lg px-3 py-1.5">
+            <span>Precisión del modelo:</span>
+            <span className={`font-semibold ${cat.precision.mape_modelo < 8 ? "text-emerald-600" : cat.precision.mape_modelo < 12 ? "text-amber-600" : "text-red-500"}`}>
+              error ~{cat.precision.mape_modelo}%
+            </span>
+            <span className="text-agro-muted/60">·</span>
+            <span>XGBoost {cat.precision.peso_xgb}% / Prophet {cat.precision.peso_prophet}%</span>
+          </div>
+        )}
+
         {/* Expand: tabla + alertas */}
         <button
           onClick={() => setExpanded((v) => !v)}

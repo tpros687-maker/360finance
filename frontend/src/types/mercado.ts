@@ -21,6 +21,14 @@ export interface HistoricoMes {
   precio: number;
 }
 
+export interface PrecisionModelo {
+  mape_modelo: number | null;
+  mape_xgb: number | null;
+  mape_prophet: number | null;
+  peso_xgb: number | null;
+  peso_prophet: number | null;
+}
+
 export interface CategoriaMercado {
   id: string;
   nombre: string;
@@ -36,6 +44,7 @@ export interface CategoriaMercado {
   historico: HistoricoMes[];
   proyeccion: ProyeccionMes[];
   alertas: AlertaMercado[];
+  precision?: PrecisionModelo;
 }
 
 export interface MercadoResponse {
