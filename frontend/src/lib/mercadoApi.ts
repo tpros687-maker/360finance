@@ -1,4 +1,4 @@
-import api from "./api";
+import { api } from "./axios";
 import type { MercadoResponse, CategoriaMercado } from "@/types/mercado";
 
 export async function getPredicciones(): Promise<MercadoResponse> {
