@@ -135,7 +135,13 @@ def entrenar_xgb(df_feat: pd.DataFrame, target_col: str, idx_train_end: int):
         return None
 
     feat_cols = _feature_cols(df_feat, target_col)
-    X = df_feat[feat_cols].values
+
+    # Limpiar inf y NaN antes de pasar a XGBoost
+    df_clean = df_feat[feat_cols].copy()
+    df_clean.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df_clean.fillna(df_clean.median(), inplace=True)
+
+    X = df_clean.values
     y = df_feat[target_col].values
 
     X_train, y_train = X[:idx_train_end], y[:idx_train_end]
@@ -179,10 +185,12 @@ def predecir_xgb_iterativo(
     predicciones = []
 
     for paso in range(n_pasos):
-        # Obtener la última fila de features
-        ultima_fila = ventana.iloc[-1:][feat_cols].values
+        # Obtener la última fila de features — limpiar inf/NaN
+        ultima_fila = ventana.iloc[-1:][feat_cols].copy()
+        ultima_fila.replace([np.inf, -np.inf], np.nan, inplace=True)
+        ultima_fila.fillna(ultima_fila.median(), inplace=True)
 
-        pred = float(model.predict(ultima_fila)[0])
+        pred = float(model.predict(ultima_fila.values)[0])
         pred = max(pred, 0.0)  # precio no puede ser negativo
         predicciones.append(pred)
 
@@ -391,9 +399,6 @@ def predecir_ensemble(
 
     # Últimos 24 meses históricos
     historico = [
-        {"mes": row["fecha"].strftime("%Y-%m"), "precio": round(float(row[target_col]), 3)}
-        for _, row in df_feat[[" fecha", target_col]].rename(columns={" fecha": "fecha"}).tail(24).iterrows()
-    ] if " fecha" not in df_feat.columns else [
         {"mes": row["fecha"].strftime("%Y-%m"), "precio": round(float(row[target_col]), 3)}
         for _, row in df_feat[["fecha", target_col]].tail(24).iterrows()
     ]
