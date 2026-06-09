@@ -1,0 +1,6 @@
+import{d as s,i as t}from"./index-BBf0gtEB.js";/**
+ * @license lucide-react v0.453.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const c=s("Trash2",[["path",{d:"M3 6h18",key:"d0wm0j"}],["path",{d:"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6",key:"4alrt4"}],["path",{d:"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2",key:"v07s0e"}],["line",{x1:"10",x2:"10",y1:"11",y2:"17",key:"1uufr5"}],["line",{x1:"14",x2:"14",y1:"11",y2:"17",key:"xtxkd"}]]);async function i(){return(await t.get("/potreros")).data}async function u(a){return(await t.post("/potreros",a)).data}async function p(a,r){return(await t.put(`/potreros/${a}`,r)).data}async function d(a){await t.delete(`/potreros/${a}`)}async function y(a){return(await t.get(`/potreros/${a}/movimientos`)).data}async function f(a){return(await t.get(`/potreros/${a}/franjas`)).data}async function m(a,r){return(await t.post(`/potreros/${a}/franjas/mover`,r)).data}async function w(a,r,e){return(await t.put(`/potreros/${a}/franjas/${r}`,{accion:e})).data}async function g(){return(await t.get("/potreros/franjas-mapa")).data}export{c as T,w as a,f as b,y as c,d,u as e,g as f,i as g,m,p as u};

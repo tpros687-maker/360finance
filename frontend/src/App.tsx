@@ -26,6 +26,7 @@ const RecomendacionesPage = lazy(() => import("@/pages/RecomendacionesPage"));
 const ScoreSaludPage = lazy(() => import("@/pages/ScoreSaludPage"));
 const CuadernoPage = lazy(() => import("@/pages/CuadernoPage"));
 const ResumenesMensualesPage = lazy(() => import("@/pages/ResumenesMensualesPage"));
+const MercadoPage = lazy(() => import("@/pages/MercadoPage"));
 const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
 const VerificarEmailPage = lazy(() => import("@/pages/VerificarEmailPage"));
 const OlvidePasswordPage = lazy(() => import("@/pages/OlvidePasswordPage"));
@@ -93,6 +94,7 @@ function AppRoutes() {
             <Route path="/cuaderno" element={<CuadernoPage />} />
             <Route path="/resumenes" element={<ResumenesMensualesPage />} />
             <Route path="/perfil" element={<PerfilPage />} />
+            <Route path="/mercado" element={<MercadoPage />} />
           </Route>
         </Route>
 

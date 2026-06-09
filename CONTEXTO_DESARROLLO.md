@@ -47,11 +47,12 @@ Cuando se mueve ganado a un potrero que tiene franjas (`potrero.tiene_franjas ==
 auto-marcar la franja 1 (`FranjaEstado.numero == 1`) como `en_uso = True`.
 Esto va en `_transferir_animales()` en `movimientos.py` o en `_ejecutar_mover_potrero()` en `whatsapp.py`.
 
-### 3. Token permanente de Meta
-El token actual (`EAAcfG...`) expira cada 24hs.
-Para hacerlo permanente: Meta Developers → tu app → WhatsApp → Configuración →
-generar "Token de acceso permanente" vinculado a un System User del Business Manager.
-Luego actualizar `META_ACCESS_TOKEN` en Railway.
+### 3. Token permanente de Meta — ✅ RESUELTO (2026-05-26)
+Se generó un token permanente (no expira) vía System User `WhatsAppBot360` del Business
+Manager 360Agro, con activo WABA (control total) y permisos `whatsapp_business_messaging` +
+`whatsapp_business_management`. Cargado en Railway como `META_ACCESS_TOKEN`. Bot verificado
+respondiendo. Pasos completos en `META_TOKEN_PERMANENTE.md`.
+Antes: el token temporal expiraba cada 24hs y el bot dejaba de responder (401 de Meta).
 
 ### 4. (Futuro) Notificación cuando termina el descanso de una franja
 Pendiente de implementar.

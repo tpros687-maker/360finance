@@ -1,0 +1,1 @@
+import{i as a}from"./index-BBf0gtEB.js";async function t(){return(await a.get("/auth/plan")).data}async function e(){return(await a.get("/pagos/historial")).data}async function n(){return(await a.post("/pagos/crear-preferencia")).data}async function c(){return(await a.post("/pagos/crear-suscripcion")).data}export{n as a,e as b,c,t as g};

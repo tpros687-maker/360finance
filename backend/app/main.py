@@ -30,6 +30,7 @@ from app.routers.rentabilidad import router as rentabilidad_router
 from app.routers.cuaderno import router as cuaderno_router
 from app.routers.whatsapp import router as whatsapp_router
 from app.routers.resumenes import router as resumenes_router
+from app.routers.mercado import router as mercado_router
 
 
 async def _job_notificaciones() -> None:
@@ -54,6 +55,14 @@ async def _job_resumen_mensual() -> None:
             await generar_resumenes_mensuales(db)
         except Exception:
             pass
+
+
+async def _job_mercado() -> None:
+    from app.services import mercado as svc_mercado
+    try:
+        svc_mercado.get_predicciones(forzar=True)
+    except Exception:
+        pass
 
 
 async def _job_recordatorios_vencimiento() -> None:
@@ -100,6 +109,13 @@ async def lifespan(app: FastAPI):
         id="recordatorios_vencimiento",
         replace_existing=True,
     )
+    # Todos los lunes a las 06:00 — reentrenar modelos de mercado
+    _scheduler.add_job(
+        _job_mercado,
+        CronTrigger(day_of_week="mon", hour=6, minute=0, timezone="America/Montevideo"),
+        id="mercado_reentrenar",
+        replace_existing=True,
+    )
     _scheduler.start()
     yield
     _scheduler.shutdown(wait=False)
@@ -139,6 +155,7 @@ app.include_router(rentabilidad_router)
 app.include_router(cuaderno_router)
 app.include_router(whatsapp_router)
 app.include_router(resumenes_router)
+app.include_router(mercado_router)
 
 # Serve uploaded files
 _uploads_dir = "/app/uploads"
