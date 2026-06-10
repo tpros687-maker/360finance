@@ -128,6 +128,8 @@ def construir_features(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
         cols_usar.append("rhe_novillo")
     if "rhe_vaca" in df.columns and "rhe_vaca" not in cols_usar:
         cols_usar.append("rhe_vaca")
+    if "usd_uyu" in df.columns and "usd_uyu" not in cols_usar:
+        cols_usar.append("usd_uyu")
 
     d = df[["fecha"] + [c for c in cols_usar if c in df.columns]].copy()
     d = d.sort_values("fecha").reset_index(drop=True)
@@ -168,6 +170,13 @@ def construir_features(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
         d[f"{c}_lag3"] = d[c].shift(3)
         d[f"{c}_lag6"] = d[c].shift(6)
         d[f"{c}_rm3"]  = d[c].shift(1).rolling(3).mean()
+
+    # ── Tipo de cambio USD/UYU ──
+    if "usd_uyu" in d.columns:
+        d["usd_uyu_lag1"] = d["usd_uyu"].shift(1)
+        d["usd_uyu_lag3"] = d["usd_uyu"].shift(3)
+        d["usd_uyu_lag6"] = d["usd_uyu"].shift(6)
+        d["usd_uyu_rm3"]  = d["usd_uyu"].shift(1).rolling(3).mean()
 
     return d.dropna()
 

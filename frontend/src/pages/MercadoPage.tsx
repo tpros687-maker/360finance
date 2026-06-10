@@ -78,6 +78,85 @@ function TendenciaBadge({ t, prom, actual, unidad }: { t: Tendencia; prom: numbe
   );
 }
 
+// ── Semáforo (resumen rápido próximo mes) ───────────────────────────────────
+
+const UMBRAL_SEMAFORO = 1.5; // % de variación para considerar sube/baja
+
+function senalSemaforo(diffPct: number): { label: string; dot: string; text: string; bg: string } {
+  if (diffPct >= UMBRAL_SEMAFORO) {
+    return { label: "Sube", dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" };
+  }
+  if (diffPct <= -UMBRAL_SEMAFORO) {
+    return { label: "Baja", dot: "bg-red-500", text: "text-red-700", bg: "bg-red-50" };
+  }
+  return { label: "Estable", dot: "bg-amber-400", text: "text-amber-700", bg: "bg-amber-50" };
+}
+
+function TablaSemaforo({ categorias }: { categorias: CategoriaMercado[] }) {
+  return (
+    <Card className="border border-agro-accent/20 shadow-sm">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base font-semibold text-agro-text">
+          Resumen rápido — próximo mes
+        </CardTitle>
+        <p className="text-xs text-agro-muted">
+          Comparación entre el precio actual y la proyección del mes siguiente para cada categoría.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto rounded-lg border border-agro-accent/20">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-agro-bg border-b border-agro-accent/20">
+                <th className="px-3 py-2 text-left font-semibold text-agro-muted">Categoría</th>
+                <th className="px-3 py-2 text-right font-semibold text-agro-muted">Precio actual</th>
+                <th className="px-3 py-2 text-right font-semibold text-agro-muted">Próximo mes</th>
+                <th className="px-3 py-2 text-right font-semibold text-agro-muted">Variación</th>
+                <th className="px-3 py-2 text-center font-semibold text-agro-muted">Señal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categorias.map((cat, i) => {
+                const proximo = cat.proyeccion[0];
+                if (!proximo) return null;
+                const diffPct = cat.precio_actual > 0
+                  ? ((proximo.estimado - cat.precio_actual) / cat.precio_actual) * 100
+                  : 0;
+                const senal = senalSemaforo(diffPct);
+                const sign = diffPct >= 0 ? "+" : "";
+                return (
+                  <tr
+                    key={cat.id}
+                    className={`border-b border-agro-accent/10 last:border-b-0 ${i % 2 === 0 ? "bg-white" : "bg-agro-bg/40"}`}
+                  >
+                    <td className="px-3 py-2 font-medium text-agro-text whitespace-nowrap">{cat.nombre}</td>
+                    <td className="px-3 py-2 text-right text-agro-text whitespace-nowrap">
+                      {fmtPrecio(cat.precio_actual, cat.unidad)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-agro-text whitespace-nowrap">
+                      {fmtPrecio(proximo.estimado, cat.unidad)}
+                      <span className="text-agro-muted"> ({fmtMes(proximo.mes)})</span>
+                    </td>
+                    <td className={`px-3 py-2 text-right font-semibold whitespace-nowrap ${senal.text}`}>
+                      {sign}{diffPct.toFixed(1)}%
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`mx-auto flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 font-semibold ${senal.bg} ${senal.text}`}>
+                        <span className={`h-2 w-2 rounded-full ${senal.dot}`} />
+                        {senal.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AlertaBadge({ n }: { n: number }) {
   if (n === 0) return <span className="text-xs text-agro-muted">Sin alertas</span>;
   return (
@@ -432,6 +511,11 @@ export default function MercadoPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Semáforo resumen */}
+      {!isLoading && !isError && (data?.categorias?.length ?? 0) > 0 && (
+        <TablaSemaforo categorias={data!.categorias} />
       )}
 
       {/* Grupos de categorías */}
