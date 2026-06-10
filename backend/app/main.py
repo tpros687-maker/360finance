@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -117,6 +118,12 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     _scheduler.start()
+
+    # Pre-calentar el cache de predicciones de mercado en segundo plano,
+    # para que la primera consulta a /mercado/predicciones no tenga que
+    # esperar el entrenamiento completo (multi-fold + grid search XGBoost).
+    asyncio.create_task(_job_mercado())
+
     yield
     _scheduler.shutdown(wait=False)
 

@@ -3,9 +3,12 @@ Modelo ensemble de alta precisión para predicción de precios ganaderos.
 
 Arquitectura:
   - XGBoost con feature engineering completo (rezagos, promedios, cruzados, estacionalidad)
-  - Prophet para tendencia/estacionalidad base
-  - Ensemble ponderado por MAPE de validación real (walk-forward)
-  - Tipo de cambio USD/UYU como variable exógena
+    y selección automática de hiperparámetros por validación multi-fold.
+  - Prophet para tendencia/estacionalidad base.
+  - Ensemble ponderado por MAPE de validación real (walk-forward multi-fold).
+  - Limpieza de outliers en el histórico antes de entrenar.
+  - Intervalos de confianza basados en el error real medido del ensemble,
+    creciendo con el horizonte de proyección.
 
 MAPE objetivo: < 8% (vs ~15% del modelo anterior)
 """
@@ -25,7 +28,26 @@ logger = logging.getLogger(__name__)
 DATA_PATH = Path(__file__).parent.parent / "data" / "dataset_completo_ganado.csv"
 ANOS_HISTORIAL = 10      # más datos para XGBoost que para Prophet
 MESES_PROYECCION = 12
-MESES_VALIDACION = 18    # walk-forward: últimos 18 meses como test set
+
+# ── Validación multi-fold ─────────────────────────────────────────────────────
+N_FOLDS = 3
+FOLD_SIZE = 6            # meses por fold (3 x 6 = 18 meses de holdout total)
+Z_INTERVALO = 1.645      # equivalente a ~90% de confianza
+
+# ── Grilla de hiperparámetros XGBoost ────────────────────────────────────────
+# Se evalúa cada combinación con validación multi-fold y se elige la de menor
+# MAPE para cada categoría (los datos son escasos, ~120 meses, por lo que
+# modelos simples suelen generalizar mejor que uno único fijo para todas).
+XGB_PARAM_GRID: list[dict] = [
+    dict(n_estimators=300, max_depth=3, learning_rate=0.05, min_child_weight=5,
+         subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1, reg_lambda=1.0),
+    dict(n_estimators=400, max_depth=4, learning_rate=0.04, min_child_weight=3,
+         subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1, reg_lambda=1.0),
+    dict(n_estimators=250, max_depth=3, learning_rate=0.06, min_child_weight=4,
+         subsample=0.7, colsample_bytree=0.9, reg_alpha=0.3, reg_lambda=1.5),
+    dict(n_estimators=600, max_depth=5, learning_rate=0.03, min_child_weight=2,
+         subsample=0.9, colsample_bytree=0.9, reg_alpha=0.05, reg_lambda=1.0),
+]
 
 # ── Variables cruzadas por categoría ─────────────────────────────────────────
 # Qué otras categorías se usan como features para predecir cada target
@@ -46,6 +68,37 @@ CROSS_FEATURES: dict[str, list[str]] = {
 }
 
 
+# ── Limpieza de outliers ──────────────────────────────────────────────────────
+
+def limpiar_outliers(df: pd.DataFrame, z_thresh: float = 4.0) -> pd.DataFrame:
+    """
+    Detecta saltos mes a mes anormales (z-score del cambio porcentual respecto
+    a la propia serie) en cada columna numérica y reemplaza esos puntos por
+    interpolación lineal. La columna 'fecha' no se toca.
+    """
+    df = df.copy()
+    for col in df.columns:
+        if col == "fecha":
+            continue
+        serie = df[col]
+        valid = serie.dropna()
+        if len(valid) < 12:
+            continue
+        pct = valid.pct_change()
+        std = pct.std()
+        mean = pct.mean()
+        if not std or np.isnan(std):
+            continue
+        z = (pct - mean) / std
+        outlier_idx = z.index[z.abs() > z_thresh]
+        if len(outlier_idx) == 0:
+            continue
+        logger.info("Mercado: %d outlier(s) detectado(s) en %s", len(outlier_idx), col)
+        df.loc[outlier_idx, col] = np.nan
+        df[col] = df[col].interpolate(method="linear", limit_direction="both")
+    return df
+
+
 # ── Feature engineering ───────────────────────────────────────────────────────
 
 def _ciclico(mes: int) -> tuple[float, float]:
@@ -64,8 +117,7 @@ def construir_features(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
       - Volatilidad: std 6m
       - Estacionalidad: sin/cos del mes
       - Tendencia: tiempo en meses desde inicio
-      - Variables cruzadas con rezago 1 y 3
-      - Tipo de cambio USD/UYU (si disponible)
+      - Variables cruzadas con rezago 1, 3 y 6
       - RHE
     """
     cross = CROSS_FEATURES.get(target_col, [])
@@ -127,11 +179,11 @@ def _feature_cols(df_feat: pd.DataFrame, target_col: str) -> list[str]:
 
 # ── Modelo XGBoost ────────────────────────────────────────────────────────────
 
-def entrenar_xgb(df_feat: pd.DataFrame, target_col: str, idx_train_end: int):
-    """Entrena XGBoost en las filas hasta idx_train_end."""
+def entrenar_xgb(df_feat: pd.DataFrame, target_col: str, idx_train_end: int, params: Optional[dict] = None):
+    """Entrena XGBoost en las filas hasta idx_train_end con los hiperparámetros dados."""
     try:
         from xgboost import XGBRegressor
-    except ImportError:
+    except Exception:
         return None
 
     feat_cols = _feature_cols(df_feat, target_col)
@@ -146,15 +198,9 @@ def entrenar_xgb(df_feat: pd.DataFrame, target_col: str, idx_train_end: int):
 
     X_train, y_train = X[:idx_train_end], y[:idx_train_end]
 
+    hp = params or XGB_PARAM_GRID[1]
     model = XGBRegressor(
-        n_estimators=400,
-        learning_rate=0.04,
-        max_depth=4,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_weight=3,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
+        **hp,
         random_state=42,
         verbosity=0,
     )
@@ -173,18 +219,15 @@ def predecir_xgb_iterativo(
     Predicción iterativa: usa la predicción del paso t como entrada en t+1.
     Reconstruye las features manualmente en cada paso.
     """
-    import copy
-
     # Historial de precios reales + predichos
     historial = list(df_feat[target_col].values)
-    fechas    = list(df_feat["fecha"].values)
 
     # Últimas filas para reconstruir features
     ventana = df_feat.copy()
 
     predicciones = []
 
-    for paso in range(n_pasos):
+    for _ in range(n_pasos):
         # Obtener la última fila de features — limpiar inf/NaN
         ultima_fila = ventana.iloc[-1:][feat_cols].copy()
         ultima_fila.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -267,56 +310,102 @@ def entrenar_prophet(df_serie: pd.DataFrame) -> Optional[object]:
     return pred[pred["ds"] > df_serie["ds"].max()][["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
 
-# ── Validación walk-forward ───────────────────────────────────────────────────
+# ── Validación walk-forward multi-fold ────────────────────────────────────────
 
-def validar_walk_forward(
+def _validar_xgb_multifold(
     df_feat: pd.DataFrame,
     target_col: str,
-    n_test: int = MESES_VALIDACION,
-) -> tuple[float, float]:
+    xgb_params: dict,
+    n_folds: int = N_FOLDS,
+    fold_size: int = FOLD_SIZE,
+) -> float:
     """
-    Entrena en primeros N-n_test meses, predice los últimos n_test mes a mes.
-    Devuelve (mape_xgb, mape_prophet) como porcentaje.
+    Entrena con datos hasta cada corte de fold y predice los siguientes
+    `fold_size` meses, acumulando errores relativos de todos los folds.
+    Devuelve el MAPE (%) agregado.
     """
     n_total = len(df_feat)
-    idx_split = n_total - n_test
+    errores: list[float] = []
 
-    if idx_split < 24:
-        return 99.0, 99.0
+    for k in range(n_folds, 0, -1):
+        idx_split = n_total - k * fold_size
+        if idx_split < 24:
+            continue
+        reales = df_feat[target_col].iloc[idx_split:idx_split + fold_size].values
+        if len(reales) == 0:
+            continue
 
-    # XGBoost
-    result_xgb = entrenar_xgb(df_feat, target_col, idx_split)
-    mape_xgb = 99.0
-    if result_xgb:
-        model_xgb, feat_cols = result_xgb
+        result = entrenar_xgb(df_feat, target_col, idx_split, xgb_params)
+        if not result:
+            continue
+        model, feat_cols = result
         df_train_part = df_feat.iloc[:idx_split]
-        preds_xgb = predecir_xgb_iterativo(model_xgb, feat_cols, df_train_part, target_col, n_test)
-        reales = df_feat[target_col].iloc[idx_split:].values
-        mapes = [abs(p - r) / (abs(r) + 1e-9) for p, r in zip(preds_xgb, reales) if r > 0.01]
-        mape_xgb = float(np.mean(mapes) * 100) if mapes else 99.0
+        preds = predecir_xgb_iterativo(model, feat_cols, df_train_part, target_col, len(reales))
 
-    # Prophet
-    df_serie = df_feat[["fecha", target_col]].rename(columns={"fecha": "ds", target_col: "y"})
-    df_train_part = df_serie.iloc[:idx_split]
-    mape_prophet = 99.0
+        for p, r in zip(preds, reales):
+            if r > 0.01:
+                errores.append(abs(p - r) / r)
+
+    return float(np.mean(errores) * 100) if errores else 99.0
+
+
+def seleccionar_mejores_params_xgb(df_feat: pd.DataFrame, target_col: str) -> tuple[dict, float]:
+    """
+    Evalúa la grilla de hiperparámetros con validación multi-fold y devuelve
+    los mejores parámetros junto con su MAPE (%).
+    """
+    mejor_params = XGB_PARAM_GRID[0]
+    mejor_mape = 999.0
+    for params in XGB_PARAM_GRID:
+        mape = _validar_xgb_multifold(df_feat, target_col, params)
+        if mape < mejor_mape:
+            mejor_mape = mape
+            mejor_params = params
+    return mejor_params, mejor_mape
+
+
+def _validar_prophet_multifold(
+    df_feat: pd.DataFrame,
+    target_col: str,
+    n_folds: int = N_FOLDS,
+    fold_size: int = FOLD_SIZE,
+) -> float:
+    """Igual que _validar_xgb_multifold pero para Prophet. Devuelve MAPE (%)."""
     try:
         from prophet import Prophet
-        m = Prophet(
-            yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False,
-            seasonality_mode="multiplicative", changepoint_prior_scale=0.08,
-            seasonality_prior_scale=15, interval_width=0.90,
-        )
-        m.fit(df_train_part)
-        futuro = m.make_future_dataframe(periods=n_test, freq="MS")
-        pred   = m.predict(futuro)
-        preds_prophet = pred.tail(n_test)["yhat"].values
-        reales = df_feat[target_col].iloc[idx_split:].values
-        mapes = [abs(p - r) / (abs(r) + 1e-9) for p, r in zip(preds_prophet, reales) if r > 0.01]
-        mape_prophet = float(np.mean(mapes) * 100) if mapes else 99.0
-    except Exception:
-        pass
+    except ImportError:
+        return 99.0
 
-    return mape_xgb, mape_prophet
+    n_total = len(df_feat)
+    df_serie = df_feat[["fecha", target_col]].rename(columns={"fecha": "ds", target_col: "y"})
+    errores: list[float] = []
+
+    for k in range(n_folds, 0, -1):
+        idx_split = n_total - k * fold_size
+        if idx_split < 24:
+            continue
+        reales = df_feat[target_col].iloc[idx_split:idx_split + fold_size].values
+        if len(reales) == 0:
+            continue
+
+        try:
+            df_train = df_serie.iloc[:idx_split]
+            m = Prophet(
+                yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False,
+                seasonality_mode="multiplicative", changepoint_prior_scale=0.08,
+                seasonality_prior_scale=15, interval_width=0.90,
+            )
+            m.fit(df_train)
+            futuro = m.make_future_dataframe(periods=len(reales), freq="MS")
+            pred = m.predict(futuro)
+            preds_p = pred.tail(len(reales))["yhat"].values
+            for p, r in zip(preds_p, reales):
+                if r > 0.01:
+                    errores.append(abs(p - r) / r)
+        except Exception:
+            continue
+
+    return float(np.mean(errores) * 100) if errores else 99.0
 
 
 # ── Predicción ensemble ───────────────────────────────────────────────────────
@@ -326,7 +415,9 @@ def predecir_ensemble(
     target_col: str,
 ) -> dict:
     """
-    Pipeline completo: feature engineering → validación → ensemble → predicción.
+    Pipeline completo: feature engineering → validación multi-fold con tuning
+    de hiperparámetros → ensemble → predicción con intervalos de confianza
+    basados en el error real medido.
     Devuelve dict con proyección, historico, mape, y pesos del ensemble.
     """
     # Serie limpia
@@ -342,9 +433,11 @@ def predecir_ensemble(
     if len(df_feat) < 36:
         return {}
 
-    # Validación walk-forward para obtener MAPE real de cada modelo
+    # Validación multi-fold: elegir mejores hiperparámetros de XGBoost y
+    # obtener el MAPE real de cada modelo
     logger.info("  Validando %s ...", target_col)
-    mape_xgb, mape_prophet = validar_walk_forward(df_feat, target_col)
+    xgb_params, mape_xgb = seleccionar_mejores_params_xgb(df_feat, target_col)
+    mape_prophet = _validar_prophet_multifold(df_feat, target_col)
     logger.info("  MAPE XGBoost=%.1f%% | Prophet=%.1f%%", mape_xgb, mape_prophet)
 
     # Pesos inversamente proporcionales al error (mejor modelo pesa más)
@@ -353,9 +446,14 @@ def predecir_ensemble(
     total       = inv_xgb + inv_prophet
     w_xgb       = inv_xgb / total
     w_prophet   = inv_prophet / total
+    mape_ensemble = w_xgb * mape_xgb + w_prophet * mape_prophet
 
-    # Entrenar en TODOS los datos
-    result_xgb = entrenar_xgb(df_feat, target_col, len(df_feat))
+    # Error relativo "típico" (1 paso) del ensemble, usado para construir
+    # intervalos de confianza que crecen con el horizonte de proyección
+    sigma_rel_1 = (mape_ensemble / 100.0) * 1.2533  # MAE -> sigma (dist. normal)
+
+    # Entrenar en TODOS los datos con los mejores hiperparámetros encontrados
+    result_xgb = entrenar_xgb(df_feat, target_col, len(df_feat), xgb_params)
     preds_xgb: list[float] = []
     if result_xgb:
         model_xgb, feat_cols = result_xgb
@@ -370,19 +468,21 @@ def predecir_ensemble(
     for i in range(MESES_PROYECCION):
         if pred_prophet is not None and i < len(pred_prophet):
             row = pred_prophet.iloc[i]
-            p_val  = float(row["yhat"])
-            p_low  = float(row["yhat_lower"])
-            p_high = float(row["yhat_upper"])
+            p_val = float(row["yhat"])
         else:
-            p_val = p_low = p_high = 0.0
+            p_val = 0.0
 
-        x_val = preds_xgb[i] if i < len(preds_xgb) else p_val
+        x_val = float(preds_xgb[i]) if i < len(preds_xgb) else p_val
 
-        # Combinar: punto central ensemble, intervalos de Prophet
-        ensemble_val = w_xgb * x_val + w_prophet * p_val
-        spread = (p_high - p_low) / 2
-        ensemble_low  = max(0.0, ensemble_val - spread)
-        ensemble_high = ensemble_val + spread
+        # Combinar: punto central ensemble
+        ensemble_val = float(w_xgb * x_val + w_prophet * p_val)
+
+        # Intervalo de confianza ~90%, creciendo con el horizonte (sqrt(h))
+        horizonte = i + 1
+        sigma_rel_h = float(sigma_rel_1 * np.sqrt(min(horizonte, MESES_PROYECCION)))
+        spread_rel = min(sigma_rel_h * Z_INTERVALO, 0.95)  # tope: no superar ±95%
+        ensemble_low  = max(0.0, ensemble_val * (1 - spread_rel))
+        ensemble_high = ensemble_val * (1 + spread_rel)
 
         # Fecha del mes proyectado
         ultima_fecha = df_feat["fecha"].iloc[-1]
@@ -408,7 +508,8 @@ def predecir_ensemble(
         "historico":  historico,
         "mape_xgb":      round(mape_xgb, 1),
         "mape_prophet":  round(mape_prophet, 1),
-        "mape_ensemble": round(w_xgb * mape_xgb + w_prophet * mape_prophet, 1),
+        "mape_ensemble": round(mape_ensemble, 1),
         "peso_xgb":      round(w_xgb * 100, 0),
         "peso_prophet":  round(w_prophet * 100, 0),
+        "xgb_params":    xgb_params,
     }

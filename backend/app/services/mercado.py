@@ -153,6 +153,9 @@ def construir_cache() -> dict:
     df = pd.read_csv(DATA_PATH)
     df["fecha"] = pd.to_datetime(df["fecha"])
 
+    from app.services.mercado_ml import limpiar_outliers
+    df = limpiar_outliers(df)
+
     resultado: dict[str, dict] = {}
 
     for col, cfg in CATEGORIAS.items():
