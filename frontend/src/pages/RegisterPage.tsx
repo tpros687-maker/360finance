@@ -121,7 +121,27 @@ export default function RegisterPage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="telefono">Teléfono WhatsApp <span className="text-slate-500 font-normal">(opcional)</span></Label>
-                  <Input id="telefono" type="tel" placeholder="+598 99 000 000" autoComplete="tel" {...register("telefono")} />
+                  <div className="flex h-10 w-full overflow-hidden rounded-md border border-agro-accent/30 bg-white focus-within:ring-2 focus-within:ring-agro-primary/20 focus-within:border-agro-primary transition-colors">
+                    <span className="flex items-center border-r border-agro-accent/30 bg-agro-bg px-3 text-sm text-agro-muted select-none">
+                      +598
+                    </span>
+                    <Input
+                      id="telefono"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="96 267 153"
+                      maxLength={9}
+                      autoComplete="off"
+                      className="h-full rounded-none border-0 focus-visible:ring-0 focus-visible:border-0"
+                      onInput={(e) => {
+                        const target = e.currentTarget;
+                        target.value = target.value.replace(/\D/g, "").slice(0, 9);
+                      }}
+                      {...register("telefono", {
+                        setValueAs: (v) => (v ? `+598${String(v).replace(/\D/g, "")}` : undefined),
+                      })}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
